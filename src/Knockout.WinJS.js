@@ -8,7 +8,7 @@
         };
 
         Knockout.computed = function (func, destObj, destProp) {
-            if (typeof func == "function" && (func.arguments == null || func.arguments.length == 0)) {
+            if (typeof func == "function") {
                 var _computed;
                 var _propName;
 
@@ -20,9 +20,14 @@
                     _propName = "value";
                 }
 
-                var _initVal = _computed.setProperty(_propName, func(function () {
+                var _initVal;
+
+                DependencyDetection.Detect(function () {
                     _computed.setProperty(_propName, func());
-                }));
+                }, function () {
+                    _initVal = func();
+                    _computed.setProperty(_propName, _initVal);
+                });
 
                 if (_computed == destObj) {
                     return _initVal;
@@ -34,28 +39,35 @@
 
         var Observable = (function () {
             function Observable(winjsObservable) {
+                var _this = this;
                 this._winjsObservable = winjsObservable;
+                var data = winjsObservable.backingData;
+                var that = this;
+                while (data && data !== Object.prototype) {
+                    Object.keys(data).forEach(function (key) {
+                        return _this._addProperty.call(that, key);
+                    });
+                    data = Object.getPrototypeOf(data);
+                }
             }
             Observable.prototype.bindable = function () {
                 return this._winjsObservable;
             };
 
+            Observable.prototype.addProperty = function (name, value) {
+                var ret = this._winjsObservable.addProperty(name);
+                this._addProperty(name);
+                return ret;
+            };
+
             Observable.prototype.getProperty = function (name) {
-                var caller = this.getProperty.caller;
-                var subscriber = null;
+                var observable = this._winjsObservable;
 
-                if (caller && caller.arguments && caller.arguments.length > 0) {
-                    var _subscriber = caller.arguments[0];
-                    if (_subscriber.bind && typeof _subscriber.bind == "function") {
-                        subscriber = _subscriber;
-                    }
-                }
+                DependencyDetection.ActIfSubscriberExists(function (subscriber) {
+                    observable.bind(name, subscriber);
+                });
 
-                if (subscriber) {
-                    this._winjsObservable.bind(name, subscriber);
-                }
-
-                return this._winjsObservable.getProperty(name);
+                return observable.getProperty(name);
             };
 
             Observable.prototype.setProperty = function (name, value) {
@@ -67,7 +79,50 @@
                     return this._winjsObservable.setProperty(name, value);
                 }
             };
+
+            Observable.prototype._addProperty = function (name) {
+                var that = this;
+
+                var prop = function (value) {
+                    if (arguments.length == 0) {
+                        return that.getProperty(name);
+                    } else {
+                        return that.setProperty(name, value);
+                    }
+                };
+
+                this[name] = prop;
+
+                var _prop = this[name];
+                _prop.peek = function () {
+                    return that._winjsObservable.getProperty(name);
+                };
+
+                return _prop;
+            };
             return Observable;
+        })();
+
+        var DependencyDetection = (function () {
+            function DependencyDetection() {
+            }
+            DependencyDetection.Detect = function (subscriber, action) {
+                var exitingSubscriber = DependencyDetection._currentSubscriber;
+                DependencyDetection._currentSubscriber = subscriber;
+                try  {
+                    action();
+                } finally {
+                    DependencyDetection._currentSubscriber = exitingSubscriber;
+                }
+            };
+
+            DependencyDetection.ActIfSubscriberExists = function (action) {
+                var subscriber = DependencyDetection._currentSubscriber;
+                if (subscriber) {
+                    action(subscriber);
+                }
+            };
+            return DependencyDetection;
         })();
 
         var PrimitiveTypeWrapper = (function () {

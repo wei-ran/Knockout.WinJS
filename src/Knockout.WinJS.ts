@@ -7,7 +7,7 @@
     }
 
     export var computed = function (func: Function, destObj? : any, destProp? : string) {
-        if (typeof func == "function" && (func.arguments == null || func.arguments.length == 0)) {
+        if (typeof func == "function") {
             var _computed;
             var _propName: string;
  
@@ -20,9 +20,15 @@
                 _propName = "value";
             }
 
-            var _initVal = _computed.setProperty(_propName, func(() => {
-                _computed.setProperty(_propName, func());
-            }));
+            var _initVal;
+           
+            DependencyDetection.Detect(() => {
+                 _computed.setProperty(_propName, func());
+            },
+            () => {
+                _initVal = func();
+                _computed.setProperty(_propName, _initVal)
+            });
 
             if (_computed == destObj) {
                 return _initVal;
@@ -36,28 +42,33 @@
     class Observable {
         constructor(winjsObservable) {
             this._winjsObservable = winjsObservable;
+            var data = winjsObservable.backingData;
+            var that = this;
+            while (data && data !== Object.prototype) {
+                Object.keys(data).forEach((key) => this._addProperty.call(that, key));
+                data = Object.getPrototypeOf(data);
+            }
+
         }
 
         bindable() {
             return this._winjsObservable;
         }
 
+        addProperty(name: string, value) : any {
+            var ret = this._winjsObservable.addProperty(name);
+            this._addProperty(name);
+            return ret;
+        }
+
         getProperty(name: string) : any {
-            var caller = this.getProperty.caller;
-            var subscriber = null;
+            var observable = this._winjsObservable;
 
-            if (caller && caller.arguments && caller.arguments.length > 0) {
-                var _subscriber = caller.arguments[0];
-                if (_subscriber.bind && typeof _subscriber.bind == "function") {
-                    subscriber = _subscriber;
-                }
-            }
+            DependencyDetection.ActIfSubscriberExists((subscriber) => {
+                observable.bind(name, subscriber);
+            });
 
-            if (subscriber) {
-                this._winjsObservable.bind(name, subscriber);
-            }
-
-            return this._winjsObservable.getProperty(name);
+            return observable.getProperty(name);
         }
 
         setProperty(name: string, value: any): any {
@@ -73,7 +84,52 @@
             }
         }
 
-    _winjsObservable: any;
+        _winjsObservable: any;
+
+        private _addProperty(name) {
+            var that = <Observable> this;
+
+            var prop = function (value?: any) {
+                if (arguments.length == 0) {
+                    return that.getProperty(name);
+                }
+                else {
+                    return that.setProperty(name, value);
+                }
+            }
+
+            this[name] = prop;
+
+            var _prop = this[name];
+            _prop.peek = function () {
+                return that._winjsObservable.getProperty(name);
+            }
+
+            return _prop;
+        }
+    }
+
+    class DependencyDetection {
+
+        private static _currentSubscriber;
+
+        static Detect(subscriber, action: Function) {
+            var exitingSubscriber = DependencyDetection._currentSubscriber;
+            DependencyDetection._currentSubscriber = subscriber;
+            try {
+                action();
+            }
+            finally {
+                DependencyDetection._currentSubscriber = exitingSubscriber;
+            }
+        }
+
+        static ActIfSubscriberExists(action: Function) {
+            var subscriber = DependencyDetection._currentSubscriber
+            if (subscriber) {
+                action(subscriber);
+            }
+        }
     }
 
     class PrimitiveTypeWrapper {
