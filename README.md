@@ -20,7 +20,7 @@ Knockout.WinJS is for enabling these features in without the dependency on Knock
 ##Examles##
 HTML:
 
-    <html>
+	<html>
 		<body>
 			<input data-win-bind="value: myValue"/>
  		</body>
@@ -35,13 +35,13 @@ JS:
 
 	var viewModel = WinJS.Knockout.observable(data);
 	viewModel.myValue = WinJS.Knockout.computed(function () {
-    	return viewModel.T1() + viewModel.T2.peek();
+    	return viewModel.t1() + viewModel.t2.peek();
 	});
 
 	WinJS.Binding.processAll(document.body, viewModel.bindable());
 
 	//the value on the HTML will be updated automatically
-	viewModel.T1(3);
+	viewModel.t1(3);
  
 
 	
