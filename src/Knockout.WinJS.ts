@@ -1,9 +1,14 @@
-﻿module WinJS.Knockout {
+﻿module WinJS.KO {
  
     export var observable = function (data): any {
         var _data = typeof data == "object" ? data : new PrimitiveTypeWrapper(data);
-        var _observable = WinJS.Binding.as(_data);
-        return new Observable(_observable);
+
+        if (_data) {
+            var _observable = WinJS.Binding.as(_data);
+            return new Observable(_observable);
+        }
+
+        return _data;
     }
 
     export var computed = function (func: Function, destObj? : any, destProp? : string) {
@@ -103,6 +108,9 @@
             var _prop = this[name];
             _prop.peek = function () {
                 return that._winjsObservable.getProperty(name);
+            }
+            _prop.computed = function (evaluator: Function) {
+                computed(evaluator, that, name);
             }
 
             return _prop;

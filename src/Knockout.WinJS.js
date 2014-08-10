@@ -1,13 +1,18 @@
 ﻿var WinJS;
 (function (WinJS) {
-    (function (Knockout) {
-        Knockout.observable = function (data) {
+    (function (KO) {
+        KO.observable = function (data) {
             var _data = typeof data == "object" ? data : new PrimitiveTypeWrapper(data);
-            var _observable = WinJS.Binding.as(_data);
-            return new Observable(_observable);
+
+            if (_data) {
+                var _observable = WinJS.Binding.as(_data);
+                return new Observable(_observable);
+            }
+
+            return _data;
         };
 
-        Knockout.computed = function (func, destObj, destProp) {
+        KO.computed = function (func, destObj, destProp) {
             if (typeof func == "function") {
                 var _computed;
                 var _propName;
@@ -16,7 +21,7 @@
                     _computed = destObj;
                     _propName = destProp;
                 } else {
-                    _computed = Knockout.observable(0);
+                    _computed = KO.observable(0);
                     _propName = "value";
                 }
 
@@ -72,7 +77,7 @@
 
             Observable.prototype.setProperty = function (name, value) {
                 if (typeof value == "object" && Object.getPrototypeOf(value) == Observable.prototype && ((this.bindable()._listeners || {})[name] || []).length == 0) {
-                    return Knockout.computed(function () {
+                    return KO.computed(function () {
                         return value.getProperty("value");
                     }, this, name);
                 } else {
@@ -96,6 +101,9 @@
                 var _prop = this[name];
                 _prop.peek = function () {
                     return that._winjsObservable.getProperty(name);
+                };
+                _prop.computed = function (evaluator) {
+                    KO.computed(evaluator, that, name);
                 };
 
                 return _prop;
@@ -131,7 +139,7 @@
             }
             return PrimitiveTypeWrapper;
         })();
-    })(WinJS.Knockout || (WinJS.Knockout = {}));
-    var Knockout = WinJS.Knockout;
+    })(WinJS.KO || (WinJS.KO = {}));
+    var KO = WinJS.KO;
 })(WinJS || (WinJS = {}));
 //# sourceMappingURL=Knockout.WinJS.js.map
