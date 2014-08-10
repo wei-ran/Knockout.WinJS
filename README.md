@@ -33,8 +33,8 @@ JS:
     	myValue: 0
 	}
 
-	var viewModel = WinJS.Knockout.observable(data);
-	viewModel.myValue = WinJS.Knockout.computed(function () {
+	var viewModel = WinJS.KO.observable(data);
+	viewModel.myValue.computed(function () {
     	return viewModel.t1() + viewModel.t2.peek();
 	});
 
