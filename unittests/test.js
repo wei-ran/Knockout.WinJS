@@ -112,12 +112,12 @@ var WinJS;
                 var o = wko.observable({ t1: 1, t2: 2, t3: 0 });
                 wko.computed(function () {
                     return o.t1() + o.t2();
-                }, o, "t3");
+                }, null, null, o, "t3");
 
                 assert.equal(o.t3(), 3);
                 o.t1(3);
                 o.t2(4);
-                promise.timeout(0).then(function () {
+                _scheduleNTimes(0, 20).then(function () {
                     assert.equal(o.t3(), 7);
                     complete();
                 });
@@ -133,7 +133,7 @@ var WinJS;
 
                 o.value(3);
 
-                _timeoutNTimes(0, 3).then(function () {
+                _scheduleNTimes(0, 20).then(function () {
                     assert.equal(o.value(), 3);
                     complete();
                 });
@@ -153,7 +153,7 @@ var WinJS;
 
                 o.t1(2);
 
-                _timeoutNTimes(0, 20).then(function () {
+                _wait().then(function () {
                     assert.equal(o.t3(), 6);
                     compete();
                 });
@@ -174,21 +174,144 @@ var WinJS;
 
                 o.t1(2);
 
-                _timeoutNTimes(0, 20).then(function () {
+                _scheduleNTimes(0, 100).then(function () {
                     assert.equal(o.t2(), 4);
                     assert.equal(o.t1(), 2);
                     compete();
                 });
             };
 
-            function _timeoutNTimes(timeout, times) {
+            function computedWriter(complete) {
+                var o = wko.observable({ t1: 1, t2: 0, t3: 1 });
+                o.t3.computed({
+                    read: function () {
+                        return 2;
+                    },
+                    write: function () {
+                        o.t1(o.t3() * 2);
+                        o.t2(o.t3() + 1);
+                    }
+                });
+
+                _scheduleNTimes(0, 10).then(function () {
+                    assert.equal(o.t1(), 4);
+                    assert.equal(o.t2(), 3);
+                    assert.equal(o.t3(), 2);
+
+                    o.t3(3);
+
+                    _scheduleNTimes(0, 10).then(function () {
+                        assert.equal(o.t1(), 6);
+                        assert.equal(o.t2(), 4);
+                        complete();
+                    });
+                });
+            }
+
+            function computedWriter2(complete) {
+                var o = wko.observable({ t1: 1, t2: 0, t3: 1 });
+                o.t2.computed(function () {
+                    return o.t1() + 1;
+                }, null, {
+                    write: function () {
+                        o.t3(o.t2() + 2);
+                    }
+                });
+
+                _scheduleNTimes(0, 10).then(function () {
+                    assert.equal(o.t2(), 2);
+                    assert.equal(o.t3(), 4);
+
+                    o.t1(3);
+
+                    _scheduleNTimes(0, 10).then(function () {
+                        assert.equal(o.t2(), 4);
+                        assert.equal(o.t3(), 6);
+                        complete();
+                    });
+                });
+            }
+
+            function computedOnwer(complete) {
+                var o = wko.observable({ t1: 1, t2: 0, t3: 1, t4: 0 });
+                o.t2.computed(function () {
+                    return this.t1() + 1;
+                }, o);
+
+                o.t3.computed({
+                    read: function () {
+                        return this.t2() + 2;
+                    },
+                    write: function () {
+                        this.t4(this.t3() + 3);
+                    },
+                    owner: o
+                });
+
+                _scheduleNTimes(0, 100).then(function () {
+                    assert.equal(o.t2(), 2);
+                    assert.equal(o.t3(), 4);
+                    assert.equal(o.t4(), 7);
+
+                    o.t1(3);
+
+                    _scheduleNTimes(0, 10).then(function () {
+                        assert.equal(o.t2(), 4);
+                        assert.equal(o.t3(), 6);
+                        assert.equal(o.t4(), 9);
+                        complete();
+                    });
+                });
+            }
+
+            function simpleCircularComputedWriter(complete) {
+                var o = wko.observable({ t1: 1, t2: 0 });
+                o.t2.computed({
+                    read: function () {
+                        return o.t1() * 2;
+                    },
+                    write: function () {
+                        o.t1(o.t2() * 2);
+                    }
+                });
+
+                _scheduleNTimes(0, 2).then(function () {
+                    assert.equal(o.t1(), 4);
+                    assert.equal(o.t2(), 2);
+
+                    o.t1(3);
+
+                    _scheduleNTimes(0, 100).then(function () {
+                        assert.equal(o.t1(), 3);
+                        assert.equal(o.t2(), 6);
+
+                        o.t2(4);
+
+                        _scheduleNTimes(0, 100).then(function () {
+                            assert.equal(o.t1(), 8);
+                            assert.equal(o.t2(), 4);
+                            complete();
+                        });
+                    });
+                });
+            }
+
+            function _post(v) {
+                return WinJS.Utilities.Scheduler.schedulePromiseNormal().then(function () {
+                    return v;
+                });
+            }
+
+            function _wait() {
+                return promise.timeout(0).then(_post);
+            }
+
+            function _scheduleNTimes(timeout, times) {
                 var currentPromise = null;
                 if (times > 0) {
                     currentPromise = promise.timeout(timeout);
                     for (var i = 1; i < times; i++) {
-                        currentPromise = currentPromise.then(function () {
-                            promise.timeout(timeout);
-                        });
+                        currentPromise = currentPromise.then(_post);
                     }
                 }
 
@@ -204,7 +327,11 @@ var WinJS;
                 "Assigned Computed Another Syntax": assignedComputedAnotherSyntax,
                 "Self Circurlar Dependency": selfCircularDependency,
                 "Indirect Computed": indirectComputed,
-                "Indirect Circular Computed": indirectCirularComputed
+                "Indirect Circular Computed": indirectCirularComputed,
+                "Computed Writer": computedWriter,
+                "Computed Writer 2": computedWriter2,
+                "Computed Owner": computedOnwer,
+                "Simple Circular Computed Writer": simpleCircularComputedWriter
             };
 
             (function Run() {

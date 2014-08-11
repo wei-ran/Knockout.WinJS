@@ -11,64 +11,96 @@
         return _data;
     }
 
-    export var computed = function (evaluator: Function, destObj?: any, destProp?: string) {
-        if (typeof evaluator == "function") {
-            var _computed;
-            var _propName: string;
+    export var computed = function (evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?, destObj?: any, destProp?: string) {
 
-            if (arguments.length > 1) {
-                if (destObj && destObj instanceof Observable) {
-                    _computed = destObj;
-                    _propName = destProp;
-                }
-                else {
-                    //if destionation object is not a observable, just sets and returns the value immediately
-                    var ret = evaluator();
-                    destObj[destProp] = ret;
-                    return ret;
-                }
+        var readFunction = evaluatorFunctionOrOptions;
+        if (evaluatorFunctionOrOptions && typeof evaluatorFunctionOrOptions == "object") {
+            // Single-parameter syntax - everything is on this "options" param
+            options = evaluatorFunctionOrOptions || {};
+            readFunction = options["read"];
+        } else {
+            // Multi-parameter syntax - construct the options according to the params passed
+            options = options || {};
+            if (!readFunction)
+                readFunction = options["read"];
+        }
+
+        if (typeof readFunction != "function")
+            throw new Error("Pass a function that returns the value of the computed function.");
+
+        evaluatorFunctionTarget = evaluatorFunctionTarget || options["owner"];
+        var evaluator = () => {
+            return evaluatorFunctionTarget ? readFunction.call(evaluatorFunctionTarget) : readFunction();
+        }
+
+        var _computed;
+        var _propName: string;
+
+        if (destObj) {
+            _computed = destObj;
+            _propName = destProp;
+        }
+        else {
+            _computed = observable(0);
+            _propName = "value";
+        }
+
+        var _initVal;
+
+        var computedUpdater = function () {
+            var context = DependencyDetection.currentContext();
+            if (context && context.type == 0) {
+                return; //triggered by the bind methods in intial computed. do nothing
             }
-            else {
-                _computed = observable(0);
-                _propName = "value";
-            }
-
-            var _initVal;
-
-            var computedUpdater = function () {
-                var context = DependencyDetection.currentContext();
-                if (context && context.type == 0) {
-                    return; //triggered by the bind methods in intial computed. do nothing
-                }
-                context = new DependencyDetectionContext(1, new UpdateStamp(new Date(0)));
-                DependencyDetection.begin(context);
-                try {
-                    var value = evaluator();
+            context = new DependencyDetectionContext(1, new UpdateStamp(new Date(0)));
+            DependencyDetection.execute(context, () => {
+                var value = evaluator();
+                if (_computed instanceof Observable) {
                     var lastUpdatedStamp = <UpdateStamp>_computed._lastUpdatedStamps[_propName];
                     if (!lastUpdatedStamp || lastUpdatedStamp.lessThan(context.upateStamp)) {
                         _computed.setProperty(_propName, value, context.upateStamp);
                     }
+                } else {
+                    _computed._propName = value;
                 }
-                finally {
-                    DependencyDetection.end();
-                }
-            }
+            });
+        }
 
-            DependencyDetection.begin(new DependencyDetectionContext(0, computedUpdater));
-            try {
-                _initVal = evaluator();
-                _computed.setProperty(_propName, _initVal);
-            }
-            finally {
-                DependencyDetection.end();
-            }
-
-            if (_computed == destObj) {
-                return _initVal;
+        var writer = options["write"];
+        if (writer && typeof writer == "function") {
+            if (_computed instanceof Observable) {
+                DependencyDetection.execute(new DependencyDetectionContext(2), () => {
+                    _computed.bindable().bind(_propName, () => {
+                        var context = DependencyDetection.currentContext();
+                        if (!context || context.type != 2) { //skip initial writer run
+                            context = new DependencyDetectionContext(3, _computed._lastUpdatedStamps[_propName] || UpdateStamp.newStamp());
+                            DependencyDetection.execute(context, () => {
+                                evaluatorFunctionTarget ? writer.call(evaluatorFunctionTarget) : writer();
+                            });
+                        }
+                    });
+                });
             }
             else {
-                return _computed;
+                throw new Error("A non-observable destionation does not support writer.");
             }
+        }
+
+        DependencyDetection.execute(new DependencyDetectionContext(0, computedUpdater), () => {
+            _initVal = evaluator();
+            if (_computed instanceof Observable) {
+                _computed.setProperty(_propName, _initVal);
+            }
+            else {
+                _computed._propName = _initVal;
+            }
+        });
+
+        if (_computed == destObj) {
+            return _initVal;
+        }
+        else {
+            return _computed;
         }
     }
 
@@ -116,9 +148,19 @@
 
         _lastUpdatedStamps = {};
 
-        setProperty(name: string, value: any, updateStamp? : UpdateStamp) {
-            this._lastUpdatedStamps[name] = updateStamp || UpdateStamp.newStamp();
-            this._winjsObservable.updateProperty(name, value);
+        setProperty(name: string, value: any, updateStamp?: UpdateStamp) {
+            var context = DependencyDetection.currentContext();
+            if (context && context.type == 3) {
+                var lastUpdateStamp = this._lastUpdatedStamps[name];
+                if (!lastUpdateStamp || lastUpdateStamp.lessThan(context.upateStamp)) {
+                    this._lastUpdatedStamps[name] = context.upateStamp;
+                    this._winjsObservable.updateProperty(name, value);
+                }
+            }
+            else {
+                this._lastUpdatedStamps[name] = updateStamp || UpdateStamp.newStamp();
+                this._winjsObservable.updateProperty(name, value);
+            }
         }
 
         _winjsObservable: any;
@@ -141,8 +183,8 @@
             _prop.peek = function () {
                 return that._winjsObservable.getProperty(name);
             }
-            _prop.computed = function (evaluator: Function) {
-                computed(evaluator, that, name);
+            _prop.computed = function (evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?) {
+                computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, that, name);
             }
 
             return _prop;
@@ -150,7 +192,7 @@
     }
 
     class DependencyDetectionContext {
-        constructor(type: number, subsriberOrUpdateStamp) {
+        constructor(type: number, subsriberOrUpdateStamp?) {
             this.type = type;
             if (type == 0) {
                 this.subscriber = subsriberOrUpdateStamp;
@@ -161,7 +203,7 @@
         }
 
 
-        type: number; //0: initial evalutor, 1: computed updater, 2: computed writer
+        type: number; //0: initial evalutor, 1: computed updater, 2: writer intial run, 3: computed writer
         subscriber: Function;   //only needed for type 0
         upateStamp: UpdateStamp; //only need for type 1 and 2
     }
@@ -171,13 +213,16 @@
         private static _currentContext: DependencyDetectionContext;
         private static contextStack = [];
 
-        static begin(context: DependencyDetectionContext) {
-            DependencyDetection.contextStack.push(DependencyDetection._currentContext);
-            DependencyDetection._currentContext = context;
-        }
+        static execute(context: DependencyDetectionContext, callback: Function) {
+            try {
+                var existingContext = DependencyDetection._currentContext;
+                DependencyDetection._currentContext = context;
 
-        static end() {
-            DependencyDetection._currentContext = DependencyDetection.contextStack.pop();
+                callback();
+            }
+            finally {
+                DependencyDetection._currentContext = existingContext;
+            }
         }
 
         static currentContext(): DependencyDetectionContext {

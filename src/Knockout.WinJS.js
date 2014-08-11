@@ -12,59 +12,91 @@
             return _data;
         };
 
-        KO.computed = function (evaluator, destObj, destProp) {
-            if (typeof evaluator == "function") {
-                var _computed;
-                var _propName;
+        KO.computed = function (evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, destObj, destProp) {
+            var readFunction = evaluatorFunctionOrOptions;
+            if (evaluatorFunctionOrOptions && typeof evaluatorFunctionOrOptions == "object") {
+                // Single-parameter syntax - everything is on this "options" param
+                options = evaluatorFunctionOrOptions || {};
+                readFunction = options["read"];
+            } else {
+                // Multi-parameter syntax - construct the options according to the params passed
+                options = options || {};
+                if (!readFunction)
+                    readFunction = options["read"];
+            }
 
-                if (arguments.length > 1) {
-                    if (destObj && destObj instanceof Observable) {
-                        _computed = destObj;
-                        _propName = destProp;
-                    } else {
-                        //if destionation object is not a observable, just sets and returns the value immediately
-                        var ret = evaluator();
-                        destObj[destProp] = ret;
-                        return ret;
-                    }
-                } else {
-                    _computed = KO.observable(0);
-                    _propName = "value";
+            if (typeof readFunction != "function")
+                throw new Error("Pass a function that returns the value of the computed function.");
+
+            evaluatorFunctionTarget = evaluatorFunctionTarget || options["owner"];
+            var evaluator = function () {
+                return evaluatorFunctionTarget ? readFunction.call(evaluatorFunctionTarget) : readFunction();
+            };
+
+            var _computed;
+            var _propName;
+
+            if (destObj) {
+                _computed = destObj;
+                _propName = destProp;
+            } else {
+                _computed = KO.observable(0);
+                _propName = "value";
+            }
+
+            var _initVal;
+
+            var computedUpdater = function () {
+                var context = DependencyDetection.currentContext();
+                if (context && context.type == 0) {
+                    return;
                 }
-
-                var _initVal;
-
-                var computedUpdater = function () {
-                    var context = DependencyDetection.currentContext();
-                    if (context && context.type == 0) {
-                        return;
-                    }
-                    context = new DependencyDetectionContext(1, new UpdateStamp(new Date(0)));
-                    DependencyDetection.begin(context);
-                    try  {
-                        var value = evaluator();
+                context = new DependencyDetectionContext(1, new UpdateStamp(new Date(0)));
+                DependencyDetection.execute(context, function () {
+                    var value = evaluator();
+                    if (_computed instanceof Observable) {
                         var lastUpdatedStamp = _computed._lastUpdatedStamps[_propName];
                         if (!lastUpdatedStamp || lastUpdatedStamp.lessThan(context.upateStamp)) {
                             _computed.setProperty(_propName, value, context.upateStamp);
                         }
-                    } finally {
-                        DependencyDetection.end();
+                    } else {
+                        _computed._propName = value;
                     }
-                };
+                });
+            };
 
-                DependencyDetection.begin(new DependencyDetectionContext(0, computedUpdater));
-                try  {
-                    _initVal = evaluator();
-                    _computed.setProperty(_propName, _initVal);
-                } finally {
-                    DependencyDetection.end();
-                }
-
-                if (_computed == destObj) {
-                    return _initVal;
+            var writer = options["write"];
+            if (writer && typeof writer == "function") {
+                if (_computed instanceof Observable) {
+                    DependencyDetection.execute(new DependencyDetectionContext(2), function () {
+                        _computed.bindable().bind(_propName, function () {
+                            var context = DependencyDetection.currentContext();
+                            if (!context || context.type != 2) {
+                                context = new DependencyDetectionContext(3, _computed._lastUpdatedStamps[_propName] || UpdateStamp.newStamp());
+                                DependencyDetection.execute(context, function () {
+                                    evaluatorFunctionTarget ? writer.call(evaluatorFunctionTarget) : writer();
+                                });
+                            }
+                        });
+                    });
                 } else {
-                    return _computed;
+                    throw new Error("A non-observable destionation does not support writer.");
                 }
+            }
+
+            DependencyDetection.execute(new DependencyDetectionContext(0, computedUpdater), function () {
+                _initVal = evaluator();
+                if (_computed instanceof Observable) {
+                    _computed.setProperty(_propName, _initVal);
+                } else {
+                    _computed._propName = _initVal;
+                }
+            });
+
+            if (_computed == destObj) {
+                return _initVal;
+            } else {
+                return _computed;
             }
         };
 
@@ -111,8 +143,17 @@
             };
 
             Observable.prototype.setProperty = function (name, value, updateStamp) {
-                this._lastUpdatedStamps[name] = updateStamp || UpdateStamp.newStamp();
-                this._winjsObservable.updateProperty(name, value);
+                var context = DependencyDetection.currentContext();
+                if (context && context.type == 3) {
+                    var lastUpdateStamp = this._lastUpdatedStamps[name];
+                    if (!lastUpdateStamp || lastUpdateStamp.lessThan(context.upateStamp)) {
+                        this._lastUpdatedStamps[name] = context.upateStamp;
+                        this._winjsObservable.updateProperty(name, value);
+                    }
+                } else {
+                    this._lastUpdatedStamps[name] = updateStamp || UpdateStamp.newStamp();
+                    this._winjsObservable.updateProperty(name, value);
+                }
             };
 
             Observable.prototype._addProperty = function (name) {
@@ -132,8 +173,8 @@
                 _prop.peek = function () {
                     return that._winjsObservable.getProperty(name);
                 };
-                _prop.computed = function (evaluator) {
-                    KO.computed(evaluator, that, name);
+                _prop.computed = function (evaluatorFunctionOrOptions, evaluatorFunctionTarget, options) {
+                    KO.computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, that, name);
                 };
 
                 return _prop;
@@ -156,13 +197,15 @@
         var DependencyDetection = (function () {
             function DependencyDetection() {
             }
-            DependencyDetection.begin = function (context) {
-                DependencyDetection.contextStack.push(DependencyDetection._currentContext);
-                DependencyDetection._currentContext = context;
-            };
+            DependencyDetection.execute = function (context, callback) {
+                try  {
+                    var existingContext = DependencyDetection._currentContext;
+                    DependencyDetection._currentContext = context;
 
-            DependencyDetection.end = function () {
-                DependencyDetection._currentContext = DependencyDetection.contextStack.pop();
+                    callback();
+                } finally {
+                    DependencyDetection._currentContext = existingContext;
+                }
             };
 
             DependencyDetection.currentContext = function () {
