@@ -5,12 +5,11 @@
             "visible": visibleBind,
             "text": textBind,
             "html": htmlBind,
-            "if": ifBind,
+            "_if": ifBind,
             "ifnot": ifNotBind,
             "click": clickBind,
             "submit": submitBind,
             "enable": enableBind,
-            "disable": disableBind,
             "hasFocus": hasFocusBind,
             "value": valueBind,
             "checked": checkedBind
@@ -45,24 +44,19 @@
         }
 
         function htmlBind(source, sourceProps, dest) {
-            WinJS.Binding.defaultBind(source, sourceProps, dest, ["innerHtml"]);
+            WinJS.Binding.defaultBind(source, sourceProps, dest, ["innerHTML"]);
         }
 
-        function _ifBindConverter(dest, value) {
-            var destElement = dest;
-            var children = [];
-
+        function _ifBindConverter(dest, children, value) {
             if (value && children.length > 0) {
-                for (var child in children) {
+                while (children.length > 0) {
+                    var child = children.pop();
                     dest.appendChild(child);
                 }
-                children = [];
-            } else if (!value && destElement.hasChildNodes()) {
-                for (var child in destElement.children) {
-                    children.push(child);
-                }
-                while (destElement.hasChildNodes()) {
-                    destElement.removeChild(destElement.lastChild);
+            } else if (!value && dest.hasChildNodes()) {
+                while (dest.hasChildNodes()) {
+                    children.push(dest.lastChild);
+                    dest.removeChild(dest.lastChild);
                 }
             }
             return value;
@@ -70,16 +64,20 @@
         ;
 
         function ifBind(source, sourceProps, dest) {
+            var children = [];
+
             var converter = WinJS.Binding.converter(function (value) {
-                return _ifBindConverter(dest, value);
+                return _ifBindConverter(dest, children, value);
             });
 
             converter(source, sourceProps, dest, ["_winjs_ko_if"]);
         }
 
         function ifNotBind(source, sourceProps, dest) {
+            var children = [];
+
             var converter = WinJS.Binding.converter(function (value) {
-                return _ifBindConverter(dest, !value);
+                return _ifBindConverter(dest, children, !value);
             });
 
             converter(source, sourceProps, dest, ["_winjs_ko_ifnot"]);
@@ -130,28 +128,19 @@
             converter(source, sourceProps, dest, ["_winjs_ko_submitBind"]);
         }
 
-        function _enableOrDisableBind(source, sourceProps, dest, isDisabled) {
+        function enableBind(source, sourceProps, dest) {
             var converter = WinJS.Binding.converter(function (value) {
-                var disabled = isDisabled ? value : !value;
-                return disabled ? "true" : null;
+                return !value;
             });
 
             converter(source, sourceProps, dest, ["disabled"]);
-        }
-
-        function enableBind(source, sourceProps, dest) {
-            _enableOrDisableBind(source, sourceProps, dest, false);
-        }
-
-        function disableBind(source, sourceProps, dest) {
-            _enableOrDisableBind(source, sourceProps, dest, true);
         }
 
         function valueBind(source, sourceProps, dest) {
             WinJS.Binding.defaultBind(source, sourceProps, dest, ["value"]);
 
             if (_isObservable(source)) {
-                dest.onchange = function () {
+                dest.oninput = function () {
                     _nestedSet(source, sourceProps, dest.value);
                 };
             }
