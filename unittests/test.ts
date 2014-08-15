@@ -1,29 +1,32 @@
-﻿interface IAssert {
-    ok(state: any, message?: string);
-    equal(actual : any, expected : any, message?: string);
-}
-
-interface IQUnit {
-    test(name: string, test: Function);
-    asyncTest(name: string, test: Function);
-    start();
-    expect(amount: number);
-    assert: IAssert;
-}
-
-var QUnit: IQUnit;
-
-var assert: IAssert = QUnit.assert;
-
-var wko = WinJS.KO;
-var wb = WinJS.Binding;
-var promise = WinJS.Promise;
-
-var WinJSBindingAttribute = "data-win-bind";
-
-
+﻿//Copyright (c) wildcatsoft (Wei Ran).
+//All Rights Reserved.
+//Licensed under the Apache License, Version 2.0.
+//See License.txt in the project root for license information.
 
 module WinJS.Knockout.UnitTests {
+
+    interface IAssert {
+        ok(state: any, message?: string);
+        equal(actual: any, expected: any, message?: string);
+    }
+
+    interface IQUnit {
+        test(name: string, test: Function);
+        asyncTest(name: string, test: Function);
+        start();
+        expect(amount: number);
+        assert: IAssert;
+    }
+
+    declare var QUnit: IQUnit;
+
+    var assert: IAssert = QUnit.assert;
+
+    var wko = WinJS.KO;
+    var wb = WinJS.Binding;
+    var promise = WinJS.Promise;
+
+    var WinJSBindingAttribute = "data-win-bind";
    
     var nullObservable = function (complete) {
         assert.equal(wko.observable(null), null);
@@ -130,7 +133,7 @@ module WinJS.Knockout.UnitTests {
         assert.equal(o.t3(), 3);
         o.t1(3);
         o.t2(4)
-        _scheduleNTimes(0, 20).then(() => {
+        _scheduleNTimes(0, 50).then(() => {
             assert.equal(o.t3(), 7);
             complete();
         });

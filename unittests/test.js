@@ -1,17 +1,19 @@
-﻿var QUnit;
-
-var assert = QUnit.assert;
-
-var wko = WinJS.KO;
-var wb = WinJS.Binding;
-var promise = WinJS.Promise;
-
-var WinJSBindingAttribute = "data-win-bind";
-
+﻿//Copyright (c) wildcatsoft (Wei Ran).
+//All Rights Reserved.
+//Licensed under the Apache License, Version 2.0.
+//See License.txt in the project root for license information.
 var WinJS;
 (function (WinJS) {
     (function (Knockout) {
         (function (UnitTests) {
+            var assert = QUnit.assert;
+
+            var wko = WinJS.KO;
+            var wb = WinJS.Binding;
+            var promise = WinJS.Promise;
+
+            var WinJSBindingAttribute = "data-win-bind";
+
             var nullObservable = function (complete) {
                 assert.equal(wko.observable(null), null);
                 complete();
@@ -117,7 +119,7 @@ var WinJS;
                 assert.equal(o.t3(), 3);
                 o.t1(3);
                 o.t2(4);
-                _scheduleNTimes(0, 20).then(function () {
+                _scheduleNTimes(0, 50).then(function () {
                     assert.equal(o.t3(), 7);
                     complete();
                 });
