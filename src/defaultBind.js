@@ -1,4 +1,8 @@
-﻿var WinJS;
+﻿//Copyright (c) wildcatsoft (Wei Ran).
+//All Rights Reserved.
+//Licensed under the Apache License, Version 2.0.
+//See License.txt in the project root for license information.
+var WinJS;
 (function (WinJS) {
     (function (KO) {
         var _koBindings = {
