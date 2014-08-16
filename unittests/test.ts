@@ -314,6 +314,77 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
+    function disposeComputedProperty(complete) {
+        var o = wko.observable({ t1: 1, t2: 2, t3: 0 });
+        o.t3.computed(function () {
+            return o.t2() + 2 * o.t1();
+        });
+
+        assert.equal(o.t3(), 4);
+        o.t1(2);
+        o.t2(3);
+        _scheduleNTimes(0, 10).then(() => {
+            assert.equal(o.t3(), 7);
+            o.t3.dispose();
+            o.t1(3);
+            o.t2(4);
+            _scheduleNTimes(0, 50).then(() => {
+                assert.equal(o.t3(), 7);
+                complete();
+            });
+        });
+    }
+
+    function disposeComputedWriter(complete) {
+        var o = wko.observable({ t1: 1, t2: 0, t3: 0 });
+        o.t2.computed(function () {
+            return o.t1() * 2;
+        }, null, {
+                write: function () {
+                    o.t3(o.t2() + 1);
+                }
+            });
+
+        _scheduleNTimes(0, 10).then(() => {
+            assert.equal(o.t2(), 2);
+            assert.equal(o.t3(), 3);
+            o.t1(2);
+            _scheduleNTimes(0, 20).then(() => {
+                assert.equal(o.t2(), 4);
+                assert.equal(o.t3(), 5);
+                o.t2.dispose();
+                o.t1(3);
+                _scheduleNTimes(0, 50).then(() => {
+                    assert.equal(o.t2(), 4);
+                    assert.equal(o.t3(), 5)
+                    complete();
+                });
+            });
+            
+        });
+    }
+
+    function autoDisposeWhenRecomputed(complete) {
+        var o = wko.observable({ t1: 1, t2: 2});
+        o.t2.computed(function () {
+            return o.t1() + 1;
+        });
+
+        assert.equal(o.bindable()._listeners["t1"].length, 1);
+
+        o.t2.computed(function () {
+            return o.t1() + 2;
+        });
+
+        assert.equal(o.bindable()._listeners["t1"].length, 1);;
+        assert.equal(o.t2(), 3);
+        o.t1(3);
+        _scheduleNTimes(0, 10).then(() => {
+            assert.equal(o.t2(), 5);
+            complete();
+        });
+    }
+
     function _post(v) : WinJS.Promise<any> {
         return WinJS.Utilities.Scheduler.schedulePromiseNormal().then(function () { return v; });
     }
@@ -348,7 +419,10 @@ module WinJS.Knockout.UnitTests {
         "Computed Writer": computedWriter,
         "Computed Writer 2": computedWriter2,
         "Computed Owner": computedOnwer,
-        "Simple Circular Computed Writer" : simpleCircularComputedWriter,
+        "Simple Circular Computed Writer": simpleCircularComputedWriter,
+        "Dispose Computed Property": disposeComputedProperty,
+        "Dispose Computed Writer": disposeComputedWriter,
+        "Auto Dispose When Recomputed" : autoDisposeWhenRecomputed,
     };
 
     (function Run() {

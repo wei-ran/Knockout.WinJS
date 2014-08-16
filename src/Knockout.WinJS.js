@@ -49,61 +49,60 @@
             var _initVal;
             var computedProperty = _computed[_propName];
 
+            if (_computed instanceof Observable) {
+                _computed.dispose(_propName);
+            }
+
             var computedUpdater = function () {
                 var context = DependencyDetection.currentContext();
                 if (context && context.type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) {
                     return;
                 }
 
-                //context = new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_UPDATER, new UpdateStamp(new Date(0)));
-                //DependencyDetection.execute(context, () => {
                 var value = evaluator();
                 var dependencies = (computedProperty._dependencies || []);
                 var updateStamp = new UpdateStamp(new Date(0));
                 dependencies.forEach(function (d) {
-                    var lastUpdateStamp = d._lastUpdatedStamps;
+                    var lastUpdateStamp = d._lastUpdatedStamp;
                     if (lastUpdateStamp && updateStamp.lessThan(lastUpdateStamp)) {
                         updateStamp = lastUpdateStamp;
                     }
                 });
 
-                //else if (context.type == DependencyDetectionContext.TYPE_COMPUTED_UPDATER) { //computed updater
-                //        var lastUpdateStamp = this._lastUpdatedStamps[name];
-                //        if (lastUpdateStamp && context.upateStamp.lessThan(lastUpdateStamp)) {
-                //            context.upateStamp = lastUpdateStamp;
-                //        }
-                //    }
                 if (_computed instanceof Observable) {
-                    var lastUpdatedStamp = computedProperty._lastUpdatedStamps;
+                    var lastUpdatedStamp = computedProperty._lastUpdatedStamp;
                     if (!lastUpdatedStamp || lastUpdatedStamp.lessThan(updateStamp)) {
                         _computed.setProperty(_propName, value, updateStamp);
                     }
                 } else {
                     _computed[_propName] = value;
                 }
-                // });
             };
 
             var writer = options["write"];
             if (writer && typeof writer == "function") {
+                computedProperty._computedWriter = function () {
+                    var context = DependencyDetection.currentContext();
+                    if (!context || context.type != DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN) {
+                        context = new DependencyDetectionContext(DependencyDetectionContext.COMPUTED_WRITER, computedProperty._lastUpdatedStamp || UpdateStamp.newStamp());
+                        DependencyDetection.execute(context, function () {
+                            evaluatorFunctionTarget ? writer.call(evaluatorFunctionTarget) : writer();
+                        });
+                    }
+                };
+
                 if (_computed instanceof Observable) {
                     DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN), function () {
-                        _computed.bindable().bind(_propName, function () {
-                            var context = DependencyDetection.currentContext();
-                            if (!context || context.type != DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN) {
-                                context = new DependencyDetectionContext(DependencyDetectionContext.COMPUTED_WRITER, computedProperty._lastUpdatedStamps || UpdateStamp.newStamp());
-                                DependencyDetection.execute(context, function () {
-                                    evaluatorFunctionTarget ? writer.call(evaluatorFunctionTarget) : writer();
-                                });
-                            }
-                        });
+                        _computed.bindable().bind(_propName, computedProperty._computedWriter);
                     });
                 } else {
                     throw new Error("A non-observable destionation does not support writer.");
                 }
             }
 
-            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_INITIAL_EVALUATION, computedUpdater, computedProperty), function () {
+            computedProperty._computedUpdater = computedUpdater;
+
+            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_INITIAL_EVALUATION, computedProperty), function () {
                 _initVal = evaluator();
                 if (_computed instanceof Observable) {
                     _computed.setProperty(_propName, _initVal);
@@ -143,7 +142,6 @@
 
             Observable.prototype.getProperty = function (name) {
                 var observable = this._winjsObservable;
-
                 var context = DependencyDetection.currentContext();
                 if (context) {
                     if (context.type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) {
@@ -158,87 +156,95 @@
                         ;
                         observableProperty._dependencies = dependencies;
 
-                        observable.bind(name, context.subscriber);
+                        observable.bind(name, context.observableProperty._computedUpdater);
                     }
-                    //else if (context.type == DependencyDetectionContext.TYPE_COMPUTED_UPDATER) { //computed updater
-                    //        var lastUpdateStamp = this._lastUpdatedStamps[name];
-                    //        if (lastUpdateStamp && context.upateStamp.lessThan(lastUpdateStamp)) {
-                    //            context.upateStamp = lastUpdateStamp;
-                    //        }
-                    //    }
                 }
 
                 return observable.getProperty(name);
             };
 
-            //_lastUpdatedStamps = {};
             Observable.prototype.setProperty = function (name, value, updateStamp) {
                 var property = this[name];
                 var context = DependencyDetection.currentContext();
                 if (context && context.type == DependencyDetectionContext.COMPUTED_WRITER) {
-                    var lastUpdateStamp = property._lastUpdatedStamps;
+                    var lastUpdateStamp = property._lastUpdatedStamp;
                     if (!lastUpdateStamp || lastUpdateStamp.lessThan(context.upateStamp)) {
-                        property._lastUpdatedStamps = context.upateStamp;
+                        property._lastUpdatedStamp = context.upateStamp;
                         this._winjsObservable.updateProperty(name, value);
                     }
                 } else {
-                    property._lastUpdatedStamps = updateStamp || UpdateStamp.newStamp();
+                    property._lastUpdatedStamp = updateStamp || UpdateStamp.newStamp();
                     this._winjsObservable.updateProperty(name, value);
                 }
             };
 
-            Observable.prototype._addProperty = function (name) {
-                var that = this;
+            Observable.prototype.dispose = function (name) {
+                var _this = this;
+                if (arguments.length > 0) {
+                    var property = this[name];
+                    if (property) {
+                        if (property._computedUpdater) {
+                            var dependencies = property._dependencies || [];
+                            dependencies.forEach(function (d) {
+                                d._observable.bindable().unbind(d._propertyName, property._computedUpdater);
+                            });
+                            property._computedUpdater = null;
+                            property._dependencies = [];
+                        }
 
-                var prop = function (value) {
-                    if (arguments.length == 0) {
-                        return that.getProperty(name);
-                    } else {
-                        return that.setProperty(name, value);
+                        if (property._computedWriter) {
+                            property._observable.bindable().unbind(property._propertyName, property._computedWriter);
+                            property._computedUpdater = null;
+                        }
                     }
-                };
+                } else {
+                    Object.keys(this).forEach(function (k) {
+                        _this.dispose(k);
+                    });
+                }
+            };
+
+            Observable.prototype._addProperty = function (name) {
+                var _this = this;
+                var prop = (function (value) {
+                    if (arguments.length == 0) {
+                        return _this.getProperty(name);
+                    } else {
+                        return _this.setProperty(name, value);
+                    }
+                });
 
                 this[name] = prop;
 
                 function _peek() {
-                    return that._winjsObservable.getProperty(name);
+                    return this._observable._winjsObservable.getProperty(name);
                 }
 
                 function _computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options) {
-                    KO.computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, that, name);
+                    KO.computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this._observable, this._propertyName);
                 }
 
                 function _dispose() {
+                    this._observable.dispose(this._propertyName);
                 }
 
-                var _prop = this[name];
-                _prop.peek = _peek;
-                _prop.computed = _computed;
-                _prop.dispose = _dispose;
-                return _prop;
+                prop._observable = this;
+                prop._propertyName = name;
+                prop.peek = _peek;
+                prop.computed = _computed;
+                prop.dispose = _dispose;
+                return prop;
             };
             return Observable;
         })();
 
-        //class ObservablePrpoerty {
-        //    constructor(observable: Observable, property: string) {
-        //        this.observable = observable;
-        //        this.property = property;
-        //    }
-        //    observable: Observable;
-        //    property: string;
-        //    equals(that: ObservablePrpoerty): boolean {
-        //        return that && this.observable === that.observable && this.property === that.property;
-        //    }
-        //}
         var DependencyDetectionContext = (function () {
-            function DependencyDetectionContext(type, subsriberOrUpdateStamp, observableProperty) {
+            function DependencyDetectionContext(type, observablePropertyOrUpdateStamp) {
                 this.type = type;
-                if (type == 0) {
-                    this.subscriber = subsriberOrUpdateStamp;
-                    this.observableProperty = observableProperty;
+                if (type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) {
+                    this.observableProperty = observablePropertyOrUpdateStamp;
                 } else {
-                    this.upateStamp = subsriberOrUpdateStamp;
+                    this.upateStamp = observablePropertyOrUpdateStamp;
                 }
             }
             DependencyDetectionContext.TYPE_INITIAL_EVALUATION = 0;
