@@ -48,7 +48,7 @@ module WinJS.KO {
         }
 
         var _initVal;
-        var computedProperty: ObservableProperty = _computed[_propName];
+        var computedProperty: ComputedProperty = _computed[_propName];
 
         if (_computed instanceof Observable) {
             _computed.dispose(_propName);
@@ -61,17 +61,17 @@ module WinJS.KO {
             }
 
             var value = evaluator();
-            var dependencies = <any[]>(computedProperty._dependencies || []);
+            var dependencies = <ObservableProperty[]>(computedProperty._dependencies || []);
             var updateStamp = new UpdateStamp(new Date(0));
             dependencies.forEach(function (d) {
-                var lastUpdateStamp = d._lastUpdatedStamp;
+                var lastUpdateStamp = d._observable._lastUpdatedStamp(d._propertyName);
                 if (lastUpdateStamp && updateStamp.lessThan(lastUpdateStamp)) {
                     updateStamp = lastUpdateStamp;
                 }
             });
 
             if (_computed instanceof Observable) {
-                var lastUpdatedStamp = <UpdateStamp>computedProperty._lastUpdatedStamp;
+                var lastUpdatedStamp = <UpdateStamp>_computed._lastUpdatedStamp(_propName);
                 if (!lastUpdatedStamp || lastUpdatedStamp.lessThan(updateStamp)) {
                     _computed.setProperty(_propName, value, updateStamp);
                 }
@@ -85,7 +85,7 @@ module WinJS.KO {
             computedProperty._computedWriter = function() {
                 var context = DependencyDetection.currentContext();
                 if (!context || context.type != DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN) { //skip for the writer initial run
-                    context = new DependencyDetectionContext(DependencyDetectionContext.COMPUTED_WRITER, computedProperty._lastUpdatedStamp || UpdateStamp.newStamp());
+                    context = new DependencyDetectionContext(DependencyDetectionContext.COMPUTED_WRITER, _computed._lastUpdatedStamp(_propName) || UpdateStamp.newStamp());
                     DependencyDetection.execute(context, () => {
                         evaluatorFunctionTarget ? writer.call(evaluatorFunctionTarget) : writer();
                     });
@@ -104,7 +104,7 @@ module WinJS.KO {
 
         computedProperty._computedUpdater = computedUpdater;
 
-        DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_INITIAL_EVALUATION, computedProperty), () => {
+        DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_INITIAL_EVALUATION, new ObservableProperty(_computed, _propName)), () => {
             _initVal = evaluator();
             if (_computed instanceof Observable) {
                 _computed.setProperty(_propName, _initVal);
@@ -122,6 +122,44 @@ module WinJS.KO {
         }
     }
 
+    export function observableArray(list) : IObservableArray<any> {
+        var winJSList = <any>new WinJS.Binding.List(list);
+        var lastUpdatedStamp: UpdateStamp;
+
+        function onListChanged() {
+            var oldUpdatedStamp = lastUpdatedStamp;
+            lastUpdatedStamp = new UpdateStamp();
+            winJSList.notify("_lastUpdatedStamp", lastUpdatedStamp, oldUpdatedStamp);
+        }
+
+        winJSList.addEventListener("itemchanged", onListChanged);
+        winJSList.addEventListener("iteminserted", onListChanged);
+        winJSList.addEventListener("itemmoved", onListChanged);
+        winJSList.addEventListener("itemmutated", onListChanged);
+        winJSList.addEventListener("itemremoved", onListChanged);
+        winJSList.addEventListener("reload", onListChanged);
+
+        function _array() {
+            var context = DependencyDetection.currentContext();
+            if (context) {
+                _bindComputedUpdaterIfNeccessary(<any>winJSList, "_lastUpdatedStamp");
+            }
+
+            return winJSList.map(function (v) {return v });
+        }
+
+        winJSList._lastUpdatedStamp = function () {
+            return lastUpdatedStamp;
+        };
+       
+        winJSList.array = _array;
+        return <IObservableArray<any>>winJSList;
+    }
+
+    export interface IObservableArray<T> extends WinJS.Binding.List<T> {
+        array(): T[];
+    }
+
     class Observable {
         constructor(winjsObservable) {
             this._winjsObservable = winjsObservable;
@@ -137,6 +175,14 @@ module WinJS.KO {
             return this._winjsObservable;
         }
 
+        bind(name: string, action: Function) {
+            return this._winjsObservable.bind(name, action);
+        }
+
+        unbind(name: string, action: Function) {
+            return this._winjsObservable.unbind(name, action);
+        }
+
         addProperty(name: string, value): any {
             var ret = this._winjsObservable.addProperty(name);
             this._addProperty(name);
@@ -144,58 +190,42 @@ module WinJS.KO {
         }
 
         getProperty(name: string): any {
-            var observable = this._winjsObservable;
-            var context = DependencyDetection.currentContext();
-            if (context) {
-                if (context.type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) { //initial computed evaluator
-                    var observableProperty = context.observableProperty;
-                    var property = this[name];
-                    var dependencies = <any[]>(observableProperty._dependencies || []);
-                    if (!dependencies.some(function (o) {
-                        return o === property;
-                    })) {
-                        dependencies.push(property);
-                    };
-                    observableProperty._dependencies = dependencies;
+            _bindComputedUpdaterIfNeccessary(this, name);
 
-                    observable.bind(name, context.observableProperty._computedUpdater);
-                }
-            }
-
-            return observable.getProperty(name);
+            return this._winjsObservable.getProperty(name);
         }
 
         setProperty(name: string, value: any, updateStamp?: UpdateStamp) {
             var property = this[name];
             var context = DependencyDetection.currentContext();
             if (context && context.type == DependencyDetectionContext.COMPUTED_WRITER) {
-                var lastUpdateStamp = property._lastUpdatedStamp;
+                var lastUpdateStamp = this._lastUpdatedStamp(name);
                 if (!lastUpdateStamp || lastUpdateStamp.lessThan(context.upateStamp)) {
-                    property._lastUpdatedStamp = context.upateStamp;
+                    this._lastUpdatedStamp(name, context.upateStamp);
                     this._winjsObservable.updateProperty(name, value);
                 }
             }
             else {
-                property._lastUpdatedStamp = updateStamp || UpdateStamp.newStamp();
+                this._lastUpdatedStamp(name, updateStamp || UpdateStamp.newStamp());
                 this._winjsObservable.updateProperty(name, value);
             }
         }
 
         dispose(name?: string) {
             if (arguments.length > 0) {
-                var property = <ObservableProperty>this[name];
+                var property = <ComputedProperty>this[name];
                 if (property) {
                     if (property._computedUpdater) {
                         var dependencies: ObservableProperty[] = property._dependencies || [];
                         dependencies.forEach(function (d) {
-                            d._observable.bindable().unbind(d._propertyName, property._computedUpdater);
+                            d._observable.unbind(d._propertyName, property._computedUpdater);
                         });
                         property._computedUpdater = null;
                         property._dependencies = [];
                     }
 
                     if (property._computedWriter) {
-                        property._observable.bindable().unbind(property._propertyName, property._computedWriter);
+                        this.unbind(name, property._computedWriter);
                         property._computedUpdater = null;
                     }
                 }
@@ -208,10 +238,21 @@ module WinJS.KO {
         }
 
         _winjsObservable: any;
+        _lastUpdatedStamps: {};
+
+        _lastUpdatedStamp(name?: string, updateStamp?: UpdateStamp) : UpdateStamp {
+            this._lastUpdatedStamps = this._lastUpdatedStamps || {};
+            if (arguments.length == 1) {
+                return this._lastUpdatedStamps[name];
+            }
+            else if (arguments.length > 1){
+                this._lastUpdatedStamps[name] = updateStamp;
+            }
+        }
 
         private _addProperty(name){
 
-            var prop: ObservableProperty = <any>((value?: any) => {
+            var prop: ComputedProperty = <any>((value?: any) => {
                 if (arguments.length == 0) {
                     return this.getProperty(name);
                 }
@@ -222,20 +263,18 @@ module WinJS.KO {
 
             this[name] = prop;
 
-            function _peek() {
-                return this._observable._winjsObservable.getProperty(name);
+            var _peek = ()=> {
+                return this._winjsObservable.getProperty(name);
             }
 
-            function _computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?) {
-                computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this._observable, this._propertyName);
+            var _computed = (evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?) => {
+                computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
             }
 
-            function _dispose() {
-                this._observable.dispose(this._propertyName);
+            var _dispose = ()=> {
+                this.dispose(name);
             }
 
-            prop._observable = this;
-            prop._propertyName = name;
             prop.peek = _peek;
             prop.computed = _computed
             prop.dispose = _dispose;
@@ -243,13 +282,45 @@ module WinJS.KO {
         }
     }
 
-    interface ObservableProperty extends Function {
-        _observable: Observable;
+    function _bindComputedUpdaterIfNeccessary(observable: IObservable, name : string) {
+        var context = DependencyDetection.currentContext();
+        if (context) {
+            if (context.type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) { //initial computed evaluator
+                var observableProperty = context.observableProperty;
+                var computed: ComputedProperty = observableProperty._observable[observableProperty._propertyName];
+                var property = new ObservableProperty(observable, name);
+                var dependencies = <any[]>(computed._dependencies || []);
+                if (!dependencies.some(function (o) {
+                    return o === property;
+                })) {
+                    dependencies.push(property);
+                };
+                computed._dependencies = dependencies;
+
+                observable.bind(name, computed._computedUpdater);
+            }
+        }
+    }
+
+    interface IObservable {
+        bind(name: string, action: Function);
+        unbind(name: string, action: Function);
+        _lastUpdatedStamp(name: string): UpdateStamp;
+    }
+
+    class ObservableProperty {
+        constructor(observable : IObservable, propertyName : string) {
+            this._observable = observable;
+            this._propertyName = propertyName;
+        }
+        _observable: IObservable;
         _propertyName: string;
+    }
+
+    interface ComputedProperty extends Function {
         _dependencies?: ObservableProperty[];
         _computedUpdater?: Function;
         _computedWriter?: Function;
-        _lastUpdatedStamp?: UpdateStamp;
         peek: Function;
         computed: Function;
         dispose: Function;

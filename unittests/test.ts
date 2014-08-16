@@ -385,6 +385,52 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
+    function basicObservableArray(complete) {
+        var a = wko.observableArray([1, 2, 3]);
+        var b = wko.computed(() => {
+            var sum = 0;
+            a.array().forEach(function (v) {
+                sum += v;
+            });
+            return sum;
+        });
+
+        assert.equal(b.value(), 6);
+
+        a.push(4);
+
+        _scheduleNTimes(0, 50).then(() => {
+            assert.equal(b.value(), 10);
+            complete();
+        });
+    }
+
+    function disposeWithObservableArray(compelete) {
+        var a = wko.observableArray([1, 2, 3]);
+        var b = wko.observable({ t1: 0, t2: 1 });
+        b.t1.computed(() => {
+            var sum = 0;
+            a.array().forEach(function (v) {
+                sum += v;
+            });
+            return sum / a.array().length + b.t2() + b.t2();
+        });
+
+        assert.equal(b.t1(), 4);
+        assert.equal((<any>a)._listeners["_lastUpdatedStamp"].length, 1);
+        assert.equal((<any>b).bindable()._listeners["t2"].length, 1);
+
+
+        a.push(4);
+
+        _scheduleNTimes(0, 50).then(() => {
+            assert.equal(b.t1(), 4.5);
+            b.t1.dispose();
+            assert.equal((<any>a)._listeners["_lastUpdatedStamp"].length, 0);
+            assert.equal((<any>b).bindable()._listeners["t2"].length, 0);
+        });
+    }
+
     function _post(v) : WinJS.Promise<any> {
         return WinJS.Utilities.Scheduler.schedulePromiseNormal().then(function () { return v; });
     }
@@ -422,7 +468,9 @@ module WinJS.Knockout.UnitTests {
         "Simple Circular Computed Writer": simpleCircularComputedWriter,
         "Dispose Computed Property": disposeComputedProperty,
         "Dispose Computed Writer": disposeComputedWriter,
-        "Auto Dispose When Recomputed" : autoDisposeWhenRecomputed,
+        "Auto Dispose When Recomputed": autoDisposeWhenRecomputed,
+        "Basic Observable Array": basicObservableArray,
+        "Dispose with Observable Array" : disposeWithObservableArray,
     };
 
     (function Run() {
