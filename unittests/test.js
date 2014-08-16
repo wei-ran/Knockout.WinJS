@@ -1,17 +1,19 @@
-﻿var QUnit;
-
-var assert = QUnit.assert;
-
-var wko = WinJS.KO;
-var wb = WinJS.Binding;
-var promise = WinJS.Promise;
-
-var WinJSBindingAttribute = "data-win-bind";
-
+﻿//Copyright (c) wildcatsoft (Wei Ran).
+//All Rights Reserved.
+//Licensed under the Apache License, Version 2.0.
+//See License.txt in the project root for license information.
 var WinJS;
 (function (WinJS) {
     (function (Knockout) {
         (function (UnitTests) {
+            var assert = QUnit.assert;
+
+            var wko = WinJS.KO;
+            var wb = WinJS.Binding;
+            var promise = WinJS.Promise;
+
+            var WinJSBindingAttribute = "data-win-bind";
+
             var nullObservable = function (complete) {
                 assert.equal(wko.observable(null), null);
                 complete();
@@ -117,7 +119,7 @@ var WinJS;
                 assert.equal(o.t3(), 3);
                 o.t1(3);
                 o.t2(4);
-                _scheduleNTimes(0, 20).then(function () {
+                _scheduleNTimes(0, 50).then(function () {
                     assert.equal(o.t3(), 7);
                     complete();
                 });
@@ -296,6 +298,122 @@ var WinJS;
                 });
             }
 
+            function disposeComputedProperty(complete) {
+                var o = wko.observable({ t1: 1, t2: 2, t3: 0 });
+                o.t3.computed(function () {
+                    return o.t2() + 2 * o.t1();
+                });
+
+                assert.equal(o.t3(), 4);
+                o.t1(2);
+                o.t2(3);
+                _scheduleNTimes(0, 10).then(function () {
+                    assert.equal(o.t3(), 7);
+                    o.t3.dispose();
+                    o.t1(3);
+                    o.t2(4);
+                    _scheduleNTimes(0, 50).then(function () {
+                        assert.equal(o.t3(), 7);
+                        complete();
+                    });
+                });
+            }
+
+            function disposeComputedWriter(complete) {
+                var o = wko.observable({ t1: 1, t2: 0, t3: 0 });
+                o.t2.computed(function () {
+                    return o.t1() * 2;
+                }, null, {
+                    write: function () {
+                        o.t3(o.t2() + 1);
+                    }
+                });
+
+                _scheduleNTimes(0, 10).then(function () {
+                    assert.equal(o.t2(), 2);
+                    assert.equal(o.t3(), 3);
+                    o.t1(2);
+                    _scheduleNTimes(0, 20).then(function () {
+                        assert.equal(o.t2(), 4);
+                        assert.equal(o.t3(), 5);
+                        o.t2.dispose();
+                        o.t1(3);
+                        _scheduleNTimes(0, 50).then(function () {
+                            assert.equal(o.t2(), 4);
+                            assert.equal(o.t3(), 5);
+                            complete();
+                        });
+                    });
+                });
+            }
+
+            function autoDisposeWhenRecomputed(complete) {
+                var o = wko.observable({ t1: 1, t2: 2 });
+                o.t2.computed(function () {
+                    return o.t1() + 1;
+                });
+
+                assert.equal(o.bindable()._listeners["t1"].length, 1);
+
+                o.t2.computed(function () {
+                    return o.t1() + 2;
+                });
+
+                assert.equal(o.bindable()._listeners["t1"].length, 1);
+                ;
+                assert.equal(o.t2(), 3);
+                o.t1(3);
+                _scheduleNTimes(0, 10).then(function () {
+                    assert.equal(o.t2(), 5);
+                    complete();
+                });
+            }
+
+            function basicObservableArray(complete) {
+                var a = wko.observableArray([1, 2, 3]);
+                var b = wko.computed(function () {
+                    var sum = 0;
+                    a.array().forEach(function (v) {
+                        sum += v;
+                    });
+                    return sum;
+                });
+
+                assert.equal(b.value(), 6);
+
+                a.push(4);
+
+                _scheduleNTimes(0, 50).then(function () {
+                    assert.equal(b.value(), 10);
+                    complete();
+                });
+            }
+
+            function disposeWithObservableArray(compelete) {
+                var a = wko.observableArray([1, 2, 3]);
+                var b = wko.observable({ t1: 0, t2: 1 });
+                b.t1.computed(function () {
+                    var sum = 0;
+                    a.array().forEach(function (v) {
+                        sum += v;
+                    });
+                    return sum / a.array().length + b.t2() + b.t2();
+                });
+
+                assert.equal(b.t1(), 4);
+                assert.equal(a._listeners["_lastUpdatedStamp"].length, 1);
+                assert.equal(b.bindable()._listeners["t2"].length, 1);
+
+                a.push(4);
+
+                _scheduleNTimes(0, 50).then(function () {
+                    assert.equal(b.t1(), 4.5);
+                    b.t1.dispose();
+                    assert.equal(a._listeners["_lastUpdatedStamp"].length, 0);
+                    assert.equal(b.bindable()._listeners["t2"].length, 0);
+                });
+            }
+
             function _post(v) {
                 return WinJS.Utilities.Scheduler.schedulePromiseNormal().then(function () {
                     return v;
@@ -331,7 +449,12 @@ var WinJS;
                 "Computed Writer": computedWriter,
                 "Computed Writer 2": computedWriter2,
                 "Computed Owner": computedOnwer,
-                "Simple Circular Computed Writer": simpleCircularComputedWriter
+                "Simple Circular Computed Writer": simpleCircularComputedWriter,
+                "Dispose Computed Property": disposeComputedProperty,
+                "Dispose Computed Writer": disposeComputedWriter,
+                "Auto Dispose When Recomputed": autoDisposeWhenRecomputed,
+                "Basic Observable Array": basicObservableArray,
+                "Dispose with Observable Array": disposeWithObservableArray
             };
 
             (function Run() {
