@@ -401,7 +401,7 @@ var WinJS;
                 });
 
                 assert.equal(b.t1(), 4);
-                assert.equal(a._listeners["_lastUpdatedStamp"].length, 1);
+                assert.equal(a._listeners["_array"].length, 1);
                 assert.equal(b.bindable()._listeners["t2"].length, 1);
 
                 a.push(4);
@@ -409,7 +409,7 @@ var WinJS;
                 _scheduleNTimes(0, 50).then(function () {
                     assert.equal(b.t1(), 4.5);
                     b.t1.dispose();
-                    assert.equal(a._listeners["_lastUpdatedStamp"].length, 0);
+                    assert.equal(a._listeners["_array"].length, 0);
                     assert.equal(b.bindable()._listeners["t2"].length, 0);
                 });
             }

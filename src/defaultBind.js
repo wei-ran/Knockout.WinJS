@@ -9,6 +9,7 @@ var WinJS;
             "visible": visibleBind,
             "text": textBind,
             "html": htmlBind,
+            "foreach": foreachBind,
             "_if": ifBind,
             "ifnot": ifNotBind,
             "click": clickBind,
@@ -51,11 +52,89 @@ var WinJS;
             WinJS.Binding.defaultBind(source, sourceProps, dest, ["innerHTML"]);
         }
 
+        function foreachBind(source, sourceProps, dest) {
+            var template;
+            if (dest.childElementCount == 1) {
+                template = dest.firstElementChild;
+            } else {
+                var newTemplate = document.createElement("div");
+                newTemplate.innerHTML = dest.innerHTML;
+                while (dest.hasChildNodes()) {
+                    dest.removeChild(dest.lastChild);
+                }
+                template = newTemplate;
+            }
+
+            function foreachUpdater(list) {
+                if (!(list instanceof Array || list instanceof WinJS.Binding.List)) {
+                    return;
+                }
+
+                var children = list.map(function (item) {
+                    var child = dest.firstChild;
+                    while (child) {
+                        if (child._winjs_ko_dataItem == item) {
+                            break;
+                        }
+                        child = child.nextSibling;
+                    }
+                    if (child) {
+                        dest.removeChild(child);
+                    } else {
+                        child = template.cloneNode(true);
+                        child._winjs_ko_dataItem = item;
+                        WinJS.Binding.processAll(child, item);
+                    }
+                    return child;
+                });
+
+                while (dest.hasChildNodes()) {
+                    dest.removeChild(dest.lastChild);
+                }
+
+                children.forEach(function (child) {
+                    dest.appendChild(child);
+                });
+            }
+
+            var root = {};
+            var current = root;
+            for (var i = 0; i < sourceProps.length - 1; i++) {
+                current = current[sourceProps[i]] = {};
+            }
+            current[sourceProps[sourceProps.length - 1]] = function (newValue, oldValue) {
+                if (oldValue instanceof WinJS.Binding.List) {
+                    oldValue.unbind("_array", foreachUpdater);
+                }
+
+                if (newValue instanceof WinJS.Binding.List && newValue._array instanceof Array) {
+                    newValue.bind("_array", foreachUpdater);
+                } else {
+                    foreachUpdater(newValue);
+                }
+            };
+            WinJS.Binding.bind(source, root);
+        }
+
+        function withBind(source, sourceProps, dest) {
+            var converter = WinJS.Binding.converter(function (value) {
+                var child = dest.firstChild;
+                while (child) {
+                    if (child instanceof Element) {
+                        WinJS.Binding.processAll(child, value);
+                    }
+                    child = child.nextSibling;
+                }
+            });
+            converter(source, sourceProps, dest, ["_winjs_ko_datacontext"]);
+        }
+
         function _ifBindConverter(dest, children, value) {
             if (value && children.length > 0) {
                 while (children.length > 0) {
                     var child = children.pop();
                     dest.appendChild(child);
+                    WinJS.Binding.processAll(child);
                 }
             } else if (!value && dest.hasChildNodes()) {
                 while (dest.hasChildNodes()) {

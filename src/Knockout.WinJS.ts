@@ -127,9 +127,11 @@ module WinJS.KO {
         var lastUpdatedStamp: UpdateStamp;
 
         function onListChanged() {
-            var oldUpdatedStamp = lastUpdatedStamp;
             lastUpdatedStamp = new UpdateStamp();
-            winJSList.notify("_lastUpdatedStamp", lastUpdatedStamp, oldUpdatedStamp);
+            var oldArray = winJSList._array;
+            winJSList._array = winJSList.map(function (v) {return v });
+
+            winJSList.notify("_array", winJSList._array, oldArray);
         }
 
         winJSList.addEventListener("itemchanged", onListChanged);
@@ -139,20 +141,20 @@ module WinJS.KO {
         winJSList.addEventListener("itemremoved", onListChanged);
         winJSList.addEventListener("reload", onListChanged);
 
-        function _array() {
-            var context = DependencyDetection.currentContext();
-            if (context) {
-                _bindComputedUpdaterIfNeccessary(<any>winJSList, "_lastUpdatedStamp");
-            }
-
-            return winJSList.map(function (v) {return v });
-        }
-
         winJSList._lastUpdatedStamp = function () {
             return lastUpdatedStamp;
         };
-       
-        winJSList.array = _array;
+
+        winJSList._array = winJSList.map(function (v) {return v });
+
+        winJSList.array = function() {
+            var context = DependencyDetection.currentContext();
+            if (context) {
+                _bindComputedUpdaterIfNeccessary(<any>winJSList, "_array");
+            }
+
+            return winJSList._array;
+        };
         return <IObservableArray<any>>winJSList;
     }
 

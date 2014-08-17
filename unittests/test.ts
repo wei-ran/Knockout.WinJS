@@ -417,7 +417,7 @@ module WinJS.Knockout.UnitTests {
         });
 
         assert.equal(b.t1(), 4);
-        assert.equal((<any>a)._listeners["_lastUpdatedStamp"].length, 1);
+        assert.equal((<any>a)._listeners["_array"].length, 1);
         assert.equal((<any>b).bindable()._listeners["t2"].length, 1);
 
 
@@ -426,7 +426,7 @@ module WinJS.Knockout.UnitTests {
         _scheduleNTimes(0, 50).then(() => {
             assert.equal(b.t1(), 4.5);
             b.t1.dispose();
-            assert.equal((<any>a)._listeners["_lastUpdatedStamp"].length, 0);
+            assert.equal((<any>a)._listeners["_array"].length, 0);
             assert.equal((<any>b).bindable()._listeners["t2"].length, 0);
         });
     }
