@@ -9,9 +9,10 @@ var WinJS;
             "visible": visibleBind,
             "text": textBind,
             "html": htmlBind,
-            "foreach": foreachBind,
-            "_if": ifBind,
-            "ifnot": ifNotBind,
+            "$foreach": foreachBind,
+            "$with": withBind,
+            "$if": ifBind,
+            "$ifnot": ifNotBind,
             "click": clickBind,
             "submit": submitBind,
             "enable": enableBind,
@@ -20,17 +21,229 @@ var WinJS;
             "checked": checkedBind
         };
 
+        var FlowControl = (function () {
+            function FlowControl(element, options) {
+                options = options || {};
+
+                if (element.winControl) {
+                    return;
+                }
+
+                this._data = options["data"];
+                this._template = options["tempate"] || _createChildElement(element);
+                this._type = options["type"];
+                this.element = element;
+                this._parentContext = _getDataContext(this.element);
+                this._dataContext = DataContext.createObservableDataContext(this._data, this._parentContext);
+                element.winControl = this;
+                this.reload();
+            }
+            FlowControl.prototype._createChildElement = function (data, parentContext) {
+                var div = document.createElement("div");
+                var context = DataContext.createObservableDataContext(data, parentContext);
+                context.addProperty("$index", -1);
+                div["_winjs_ko_dataContext"] = context;
+                this._template.render(data, div);
+                return div;
+            };
+
+            FlowControl.prototype.reload = function () {
+                var _this = this;
+                if (this._data && this._template) {
+                    var child = this.element.lastElementChild;
+                    while (this.element.childElementCount > 0) {
+                        if (typeof child["dispose"] == "function") {
+                            child["dispose"]();
+                        }
+
+                        var childContext = child["_winjs_ko_dataContext"];
+                        if (typeof childContext["dispose"] == "function") {
+                            childContext["dispose"]();
+                        }
+
+                        this.element.removeChild(child);
+                    }
+
+                    switch (this._type) {
+                        case "with":
+                            var childElement = this._createChildElement(this._data, this._parentContext);
+                            this.element.appendChild(childElement);
+                            break;
+                        case "if":
+                            break;
+                        case "ifnot":
+                            break;
+                        case "foreach":
+                            var dataContex = DataContext.createObservableDataContext(this._data, this._parentContext);
+
+                            var foreachUpdater = function (list) {
+                                if (!(list instanceof Array || list instanceof WinJS.Binding.List)) {
+                                    return;
+                                }
+
+                                var children = list.map(function (item, index) {
+                                    var child = _this.element.firstChild;
+                                    while (child) {
+                                        if (child._winjs_ko_dataItem == item) {
+                                            break;
+                                        }
+                                        child = child.nextSibling;
+                                    }
+                                    if (child) {
+                                        _this.element.removeChild(child);
+                                    } else {
+                                        child = _this._createChildElement(item, dataContex);
+                                        child._winjs_ko_dataItem = item;
+                                    }
+                                    return child;
+                                });
+
+                                //disposeChildNodes(dest);
+                                children.forEach(function (child, index) {
+                                    child["_winjs_ko_dataContext"].$index(index);
+                                    _this.element.appendChild(child);
+                                });
+                            };
+
+                            if (this._data instanceof WinJS.Binding.List && this._data._array instanceof Array) {
+                                this._data.bind("_array", foreachUpdater);
+                            } else {
+                                foreachUpdater(this._data);
+                            }
+                            break;
+                    }
+                }
+            };
+
+            Object.defineProperty(FlowControl.prototype, "data", {
+                get: function () {
+                    return this._data;
+                },
+                set: function (data) {
+                    this._data = data;
+                    this.reload();
+                },
+                enumerable: true,
+                configurable: true
+            });
+
+
+            Object.defineProperty(FlowControl.prototype, "template", {
+                get: function () {
+                    return this._template;
+                },
+                set: function (template) {
+                    this._template = template;
+                    this.reload();
+                },
+                enumerable: true,
+                configurable: true
+            });
+
+
+            Object.defineProperty(FlowControl.prototype, "type", {
+                get: function () {
+                    return this.type;
+                },
+                set: function (type) {
+                    this._type = type;
+                    this.reload();
+                },
+                enumerable: true,
+                configurable: true
+            });
+
+
+            FlowControl.cctor = (function () {
+                WinJS.Utilities.markSupportedForProcessing(FlowControl);
+                FlowControl["isDeclarativeControlContainer"] = true;
+            })();
+            return FlowControl;
+        })();
+        KO.FlowControl = FlowControl;
+
+        function _getDataContext(element) {
+            var cur = element;
+            while (cur && !DataContext.isObservableDataContext(cur["_winjs_ko_dataContext"])) {
+                cur = cur.parentElement;
+            }
+
+            return cur ? cur["_winjs_ko_dataContext"] : null;
+        }
+
         KO.defaultBind = WinJS.Binding.initializer(function (source, sourceProps, dest, destProps) {
+            var data = source;
+            if (destProps.length > 0 && _dataContextMemebrs[sourceProps[0]]) {
+                data = _getDataContext(dest).bindable();
+            }
+
             if (destProps || destProps.length == 1) {
                 var destProp = destProps[0];
 
                 if (_koBindings[destProp]) {
-                    return _koBindings[destProp](source, sourceProps, dest);
+                    return _koBindings[destProp](data, sourceProps, dest);
                 }
             }
 
             return WinJS.Binding.defaultBind(source, sourceProps, dest, destProps);
         });
+
+        var _dataContextMemebrs = { "$parent": true, "$parents": true, "$root": true, "$data": true, "$index": true, "$parentContext": true, "$rawData": true, "$element": true, "$context": true };
+
+        var DataContext = (function () {
+            function DataContext() {
+            }
+            DataContext.prototype.data = function (_data) {
+                this.$data = _data;
+                if (_data instanceof WinJS.Binding.List) {
+                    this.$rawData = WinJS.KO.getRawArray(_data);
+                } else {
+                    this.$rawData = WinJS.Binding.unwrap(_data);
+                }
+            };
+
+            DataContext.isObservableDataContext = function (source) {
+                return source && source.bindable && WinJS.Binding.unwrap(source.bindable()) instanceof DataContext;
+            };
+
+            DataContext.createObservableDataContext = function (data, parent) {
+                var dataContext = new DataContext;
+                dataContext.data(data);
+                if (parent) {
+                    dataContext.$parentContexts = [parent];
+                    dataContext.$parentContexts.concat(parent.$parentContexts());
+                    dataContext.$parentContext = parent;
+                } else {
+                    dataContext.$parentContexts = [];
+                }
+
+                var dataContextObservable = KO.observable(dataContext);
+
+                if (parent) {
+                    dataContextObservable.addComputedProperty("$parents", function () {
+                        return dataContextObservable.$parentContexts.peek().map(function (p) {
+                            return p.$data();
+                        });
+                    });
+
+                    dataContextObservable.addComputedProperty("$parent", function () {
+                        return dataContextObservable.$parentContext.peek().$data();
+                    });
+
+                    dataContextObservable.addComputedProperty("$root", function () {
+                        var parentContexts = dataContextObservable.$parentContexts.peek();
+                        if (parentContexts.length > 0) {
+                            return parentContexts[parentContexts.length - 1].$data();
+                        }
+                    });
+                } else {
+                    dataContext.$parents = [];
+                }
+
+                return dataContextObservable;
+            };
+            return DataContext;
+        })();
 
         function visibleBind(source, sourceProps, dest) {
             var converter = WinJS.Binding.converter(function (visible) {
@@ -48,105 +261,57 @@ var WinJS;
             return WinJS.Binding.defaultBind(source, sourceProps, dest, ["innerHTML"]);
         }
 
-        function foreachBind(source, sourceProps, dest) {
-            var template;
-            if (dest.childElementCount == 1) {
-                template = dest.firstElementChild;
-                dest.removeChild(dest.firstElementChild);
+        function _createChildElement(root) {
+            var template = document.createElement("div");
+            template.innerHTML = root.innerHTML;
+
+            var elements = root.querySelectorAll("[data-win-bind]");
+            for (var i = 0; i < elements.length; i++) {
+                elements.item(i).attributes.removeNamedItem("data-win-bind");
+            }
+            while (root.hasChildNodes()) {
+                root.removeChild(root.lastChild);
+            }
+
+            var _template = new WinJS.Binding.Template(template);
+            _template.bindingInitializer = WinJS.KO.defaultBind;
+            template.isDeclarativeControlContainer = true;
+
+            return _template;
+        }
+
+        function _getParentDataContext(source) {
+            if (DataContext.isObservableDataContext(source)) {
+                return source;
             } else {
-                var newTemplate = document.createElement("div");
-                newTemplate.innerHTML = dest.innerHTML;
-                while (dest.hasChildNodes()) {
-                    dest.removeChild(dest.lastChild);
-                }
-                template = newTemplate;
+                return DataContext.createObservableDataContext(source, null);
+            }
+        }
+
+        function foreachBind(source, sourceProps, dest, dataContext) {
+            var flowControl = dest.winControl;
+
+            if (!flowControl && dest.getAttribute("data-win-control") == "WinJS.KO.FlowControl") {
+                flowControl = new WinJS.KO.FlowControl(dest);
             }
 
-            var winJSTemplate = new WinJS.Binding.Template(template);
+            flowControl.type = "foreach";
+            var ret = WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
 
-            function disposeChildNodes(dest) {
-                while (dest.hasChildNodes()) {
-                    var child = dest.lastChild;
-                    if (child.dispose) {
-                        child.dispose();
-                    }
-                    dest.removeChild(child);
-                }
-            }
-
-            function foreachUpdater(list) {
-                if (!(list instanceof Array || list instanceof WinJS.Binding.List)) {
-                    return;
-                }
-
-                var children = list.map(function (item) {
-                    var child = dest.firstChild;
-                    while (child) {
-                        if (child._winjs_ko_dataItem == item) {
-                            break;
-                        }
-                        child = child.nextSibling;
-                    }
-                    if (child) {
-                        dest.removeChild(child);
-                    } else {
-                        child = document.createElement("div");
-                        winJSTemplate.render(item, child);
-                        child._winjs_ko_dataItem = item;
-                    }
-                    return child;
-                });
-
-                disposeChildNodes(dest);
-
-                children.forEach(function (child) {
-                    dest.appendChild(child);
-                });
-            }
-
-            var root = {};
-            var current = root;
-            for (var i = 0; i < sourceProps.length - 1; i++) {
-                current = current[sourceProps[i]] = {};
-            }
-            var listBind;
-            current[sourceProps[sourceProps.length - 1]] = function (newValue, oldValue) {
-                if (oldValue instanceof WinJS.Binding.List) {
-                    oldValue.unbind("_array", foreachUpdater);
-                    listBind = null;
-                }
-
-                if (newValue instanceof WinJS.Binding.List && newValue._array instanceof Array) {
-                    newValue.bind("_array", foreachUpdater);
-                    listBind = newValue;
-                } else {
-                    foreachUpdater(newValue);
-                }
-            };
-            var listBindCancelable = WinJS.Binding.bind(source, root);
-
-            return {
-                cancel: function () {
-                    listBindCancelable.cancel();
-                    if (listBind) {
-                        listBind.unbind("_array", foreachUpdater);
-                    }
-                    disposeChildNodes(dest);
-                }
-            };
+            return ret;
         }
 
         function withBind(source, sourceProps, dest) {
-            var converter = WinJS.Binding.converter(function (value) {
-                var child = dest.firstChild;
-                while (child) {
-                    if (child instanceof Element) {
-                        WinJS.Binding.processAll(child, value);
-                    }
-                    child = child.nextSibling;
-                }
-            });
-            return converter(source, sourceProps, dest, ["_winjs_ko_datacontext"]);
+            var flowControl = dest.winControl;
+
+            if (!flowControl && dest.getAttribute("data-win-control") == "WinJS.KO.FlowControl") {
+                flowControl = new WinJS.KO.FlowControl(dest);
+            }
+
+            flowControl.type = "with";
+            var ret = WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
+
+            return ret;
         }
 
         function _ifBindConverter(dest, children, value) {

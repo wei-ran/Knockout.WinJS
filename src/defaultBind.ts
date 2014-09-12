@@ -9,9 +9,10 @@ module WinJS.KO {
         "visible": visibleBind,
         "text": textBind,
         "html": htmlBind,
-        "foreach": foreachBind,
-        "_if": ifBind,
-        "ifnot": ifNotBind,
+        "$foreach": foreachBind,
+        "$with" : withBind,
+        "$if": ifBind,
+        "$ifnot": ifNotBind,
         "click": clickBind,
         "submit": submitBind,
         "enable": enableBind,
@@ -20,14 +21,170 @@ module WinJS.KO {
         "checked": checkedBind,
     }
 
+    export class FlowControl {
+        constructor(element: HTMLElement, options?: {}) {
+            options = options || {};
+
+            if (element.winControl) {
+                return;
+            }
+
+            this._data = options["data"];
+            this._template = options["tempate"] || _createChildElement(element)
+            this._type = options["type"];
+            this.element = element;
+            this._parentContext = _getDataContext(this.element);
+            this._dataContext = DataContext.createObservableDataContext(this._data, this._parentContext);
+            element.winControl = this;
+            this.reload();
+        }
+
+        element: HTMLElement;
+
+        _data: any;
+        _template: WinJS.Binding.Template;
+        _type: string;
+        _dataContext: any;
+        _parentContext: any;
+
+        _createChildElement(data, parentContext) : HTMLElement {
+            var div = document.createElement("div");
+            var context = DataContext.createObservableDataContext(data, parentContext);
+            context.addProperty("$index", -1);
+            div["_winjs_ko_dataContext"] = context;
+            this._template.render(data, div);
+            return div;
+        }
+
+     
+
+        reload() {
+            if (this._data && this._template) {
+                var child = this.element.lastElementChild;
+                while (this.element.childElementCount > 0) {
+                    if (typeof child["dispose"] == "function") {
+                        child["dispose"]();
+                    }
+
+                    var childContext = child["_winjs_ko_dataContext"];
+                    if (typeof childContext["dispose"] == "function") {
+                        childContext["dispose"]();
+                    }
+
+                    this.element.removeChild(child);
+                }
+
+                switch (this._type) {
+                    case "with":
+                        var childElement = this._createChildElement(this._data, this._parentContext);
+                        this.element.appendChild(childElement);
+                        break;
+                    case "if":
+                        break;
+                    case "ifnot":
+                        break;
+                    case "foreach":
+                        var dataContex = DataContext.createObservableDataContext(this._data, this._parentContext);
+
+                        var foreachUpdater = (list) => {
+                            if (!(list instanceof Array || list instanceof WinJS.Binding.List)) {
+                                return;
+                            }
+
+                            var children = <any[]>list.map((item, index: number) => {
+                                var child = this.element.firstChild
+                                while (child) {
+                                    if ((<any>child)._winjs_ko_dataItem == item) {
+                                        break;
+                                    }
+                                    child = child.nextSibling;
+                                }
+                                if (child) {
+                                    this.element.removeChild(child);
+                                }
+                                else {
+                                    child = this._createChildElement(item, dataContex);
+                                    (<any>child)._winjs_ko_dataItem = item;
+                                }
+                                return child;
+                            });
+
+                            //disposeChildNodes(dest);
+
+                            children.forEach((child, index:number) => {
+                                child["_winjs_ko_dataContext"].$index(index);
+                                this.element.appendChild(child);
+                            });
+                        }
+
+                        if (this._data instanceof WinJS.Binding.List && this._data._array instanceof Array) {
+                            this._data.bind("_array", foreachUpdater);    
+                        }
+                        else {
+                            foreachUpdater(this._data);
+                        }
+                        break;
+                }
+                
+            }
+        }
+
+        get data() {
+            return this._data;
+        }
+
+        set data(data) {
+            this._data = data;
+            this.reload();
+        }
+
+        get template() : WinJS.Binding.Template {
+            return this._template;
+        }
+
+        set template(template: WinJS.Binding.Template) {
+            this._template = template;
+            this.reload();
+        }
+
+        get type() : string {
+            return this.type;
+        }
+
+        set type(type: string) {
+            this._type = type;
+            this.reload();
+        }
+
+        static cctor = (function () {
+            WinJS.Utilities.markSupportedForProcessing(FlowControl);
+            FlowControl["isDeclarativeControlContainer"] = true;
+        })();
+    }
+
+    function _getDataContext(element : HTMLElement)
+    {
+        var cur = element;
+        while (cur && !DataContext.isObservableDataContext(cur["_winjs_ko_dataContext"])) {
+            cur = cur.parentElement;
+        }
+
+        return cur ? cur["_winjs_ko_dataContext"] : null;
+    }
+
     export var defaultBind = WinJS.Binding.initializer(function (
-        source, sourceProps: string[], dest: HTMLElement, destProps: string[]) : ICancelable {
+        source, sourceProps: string[], dest: HTMLElement, destProps: string[]): ICancelable {
+
+        var data = source;
+        if (destProps.length > 0 && _dataContextMemebrs[sourceProps[0]]) {
+            data = _getDataContext(dest).bindable();
+        }
 
         if (destProps || destProps.length == 1) {
             var destProp = destProps[0];
 
             if (_koBindings[destProp]) {
-               return _koBindings[destProp](source, sourceProps, dest);     
+               return _koBindings[destProp](data, sourceProps, dest);     
             }
         }
 
@@ -37,6 +194,78 @@ module WinJS.KO {
 
     interface ICancelable {
         cancel();
+    }
+
+    var _dataContextMemebrs = { "$parent": true, "$parents": true, "$root": true, "$data": true, "$index": true, "$parentContext": true, "$rawData": true, "$element": true, "$context": true };
+
+    class DataContext {
+        data(_data) {
+            this.$data = _data;
+            if (_data instanceof WinJS.Binding.List) {
+                this.$rawData = WinJS.KO.getRawArray(_data);
+            }
+            else {
+                this.$rawData = WinJS.Binding.unwrap(_data);
+            }
+        }
+
+        static isObservableDataContext(source): boolean {
+            return source && source.bindable && WinJS.Binding.unwrap(source.bindable()) instanceof DataContext;
+        }
+
+        static createObservableDataContext(data, parent) :any {
+            var dataContext = new DataContext;
+            dataContext.data(data);
+            if (parent) {
+                dataContext.$parentContexts = [parent];
+                dataContext.$parentContexts.concat(parent.$parentContexts());
+                dataContext.$parentContext = parent;
+            }
+            else {
+                dataContext.$parentContexts = [];
+            }
+
+            var dataContextObservable = observable(dataContext);
+
+
+            if (parent) {
+                dataContextObservable.addComputedProperty("$parents", function () {
+                    return dataContextObservable.$parentContexts.peek().map(function (p) {
+                        return p.$data();
+                    });
+                });
+
+                dataContextObservable.addComputedProperty("$parent", function () {
+                    return dataContextObservable.$parentContext.peek().$data();
+                });
+
+                dataContextObservable.addComputedProperty("$root", function () {
+                    var parentContexts : any[] = dataContextObservable.$parentContexts.peek();
+                    if (parentContexts.length > 0) {
+                        return parentContexts[parentContexts.length - 1].$data();
+                    }       
+                });
+            }
+            else {
+                dataContext.$parents = [];
+            }
+
+            return dataContextObservable;
+
+        }
+  
+        
+
+        $parent: any;
+        $parents: any[];
+        $root: any;
+        $data: any;
+        $index: number;
+        $parentContexts: any[];
+        $parentContext: any;
+        $rawData: any;
+        $element: Element;
+        $context: DataContext;
     }
 
     function visibleBind(source, sourceProps: string[], dest : HTMLElement) : ICancelable {
@@ -55,108 +284,60 @@ module WinJS.KO {
         return WinJS.Binding.defaultBind(source, sourceProps, dest, ["innerHTML"]);
     }
 
-    function foreachBind(source, sourceProps: string[], dest: HTMLElement) : ICancelable {
-        var template: Element;
-        if (dest.childElementCount == 1) {
-            template = dest.firstElementChild;
-            dest.removeChild(dest.firstElementChild);
+    function _createChildElement(root : HTMLElement) : WinJS.Binding.Template {
+        var template = document.createElement("div");
+        template.innerHTML = root.innerHTML;
+
+        var elements = root.querySelectorAll("[data-win-bind]");
+        for (var i = 0; i < elements.length; i++) {
+            elements.item(i).attributes.removeNamedItem("data-win-bind");
         }
-        else {
-            var newTemplate = document.createElement("div");
-            newTemplate.innerHTML = dest.innerHTML;
-            while (dest.hasChildNodes()) {
-                dest.removeChild(dest.lastChild);
-            }
-            template = newTemplate;
+        while (root.hasChildNodes()) {
+            root.removeChild(root.lastChild);
         }
 
-        var winJSTemplate = new WinJS.Binding.Template(<any>template);
+        var _template = new WinJS.Binding.Template(<any>template);
+        _template.bindingInitializer = WinJS.KO.defaultBind;
+        (<any>template).isDeclarativeControlContainer = true;
 
-        function disposeChildNodes(dest: HTMLElement) {
-            while (dest.hasChildNodes()) {
-                var child: any = dest.lastChild;
-                if (child.dispose) {
-                    child.dispose()
-                    }
-                dest.removeChild(child);
-            }
-        }
-
-        function foreachUpdater(list) {
-            if (!(list instanceof Array || list instanceof WinJS.Binding.List)) {
-                return;
-            }
-
-            var children = list.map(function (item) {
-                var child = dest.firstChild
-                while (child) {
-                    if ((<any>child)._winjs_ko_dataItem == item) {
-                        break;
-                    }
-                    child = child.nextSibling;
-                }
-                if (child) {
-                    dest.removeChild(child);
-                }
-                else {
-                    child = document.createElement("div");
-                    winJSTemplate.render(item, <any>child);
-                    (<any>child)._winjs_ko_dataItem = item;       
-                }
-                return child;
-            });
-
-            disposeChildNodes(dest);
-
-            children.forEach(function (child) {
-                dest.appendChild(child);
-            });
-        }
-
-        var root = {};
-        var current = root;
-        for (var i = 0; i < sourceProps.length - 1; i++) {
-            current = current[sourceProps[i]] = {};
-        }
-        var listBind;
-        current[sourceProps[sourceProps.length - 1]] = function (newValue, oldValue) {
-            if (oldValue instanceof WinJS.Binding.List) {
-                oldValue.unbind("_array", foreachUpdater);
-                listBind = null;
-            }
-
-            if (newValue instanceof WinJS.Binding.List && newValue._array instanceof Array) {
-                newValue.bind("_array", foreachUpdater);
-                listBind = newValue;
-            }
-            else {
-                foreachUpdater(newValue);
-            }
-        };
-        var listBindCancelable = <ICancelable> WinJS.Binding.bind(source, root);
-
-        return {
-            cancel: function () {
-                listBindCancelable.cancel();
-                if (listBind) {
-                    listBind.unbind("_array", foreachUpdater);
-                }
-                disposeChildNodes(dest);
-            }
-        };
+        return _template;
     }
 
+    function _getParentDataContext(source) {
+        if (DataContext.isObservableDataContext(source)) {
+            return source;
+        }
+        else {
+            return DataContext.createObservableDataContext(source, null);
+        }  
+    }
+
+    function foreachBind(source, sourceProps: string[], dest: HTMLElement, dataContext : DataContext) : ICancelable {
+        var flowControl: FlowControl = dest.winControl;
+
+        if (!flowControl && dest.getAttribute("data-win-control") == "WinJS.KO.FlowControl") {
+            flowControl = new WinJS.KO.FlowControl(dest);
+        }
+
+        flowControl.type = "foreach"
+        var ret = WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
+
+        return ret;
+    }
+
+
     function withBind(source, sourceProps: string[], dest: HTMLElement) : ICancelable {
-        var converter = WinJS.Binding.converter(function (value) {
-            var child = dest.firstChild;
-            while (child) {
-                if (child instanceof Element) {
-                    WinJS.Binding.processAll(<Element>child, value);
-                }
-                child = child.nextSibling
-            }
-        });
-        return converter(source, sourceProps, dest, ["_winjs_ko_datacontext"]);
+
+        var flowControl: FlowControl = dest.winControl;
+
+        if (!flowControl && dest.getAttribute("data-win-control") == "WinJS.KO.FlowControl") {
+            flowControl = new WinJS.KO.FlowControl(dest);  
+        }
+
+        flowControl.type = "with"
+        var ret = WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
+
+        return ret;
     }
 
     function _ifBindConverter(dest: HTMLElement, children : any[], value) {

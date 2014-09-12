@@ -125,9 +125,7 @@
             function onListChanged() {
                 lastUpdatedStamp = new UpdateStamp();
                 var oldArray = winJSList._array;
-                winJSList._array = winJSList.map(function (v) {
-                    return v;
-                });
+                winJSList._array = getRawArray(winJSList);
 
                 winJSList.notify("_array", winJSList._array, oldArray);
             }
@@ -143,9 +141,7 @@
                 return lastUpdatedStamp;
             };
 
-            winJSList._array = winJSList.map(function (v) {
-                return v;
-            });
+            winJSList._array = getRawArray(winJSList);
 
             winJSList.array = function () {
                 var context = DependencyDetection.currentContext();
@@ -158,6 +154,15 @@
             return winJSList;
         }
         KO.observableArray = observableArray;
+
+        function getRawArray(list) {
+            if (list instanceof WinJS.Binding.List) {
+                return list.map(function (v) {
+                    return v;
+                });
+            }
+        }
+        KO.getRawArray = getRawArray;
 
         var Observable = (function () {
             function Observable(winjsObservable) {
@@ -183,8 +188,13 @@
                 return this._winjsObservable.unbind(name, action);
             };
 
+            Observable.prototype.addComputedProperty = function (name, evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, destObj, destProp) {
+                this.addProperty(name);
+                KO.computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
+            };
+
             Observable.prototype.addProperty = function (name, value) {
-                var ret = this._winjsObservable.addProperty(name);
+                var ret = this._winjsObservable.addProperty(name, value);
                 this._addProperty(name);
                 return ret;
             };
@@ -243,6 +253,10 @@
                 } else if (arguments.length > 1) {
                     this._lastUpdatedStamps[name] = updateStamp;
                 }
+            };
+
+            Observable.prototype._getObservable = function () {
+                return this;
             };
 
             Observable.prototype._addProperty = function (name) {

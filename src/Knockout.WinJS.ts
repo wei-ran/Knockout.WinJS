@@ -129,7 +129,7 @@ module WinJS.KO {
         function onListChanged() {
             lastUpdatedStamp = new UpdateStamp();
             var oldArray = winJSList._array;
-            winJSList._array = winJSList.map(function (v) {return v });
+            winJSList._array = getRawArray(winJSList);
 
             winJSList.notify("_array", winJSList._array, oldArray);
         }
@@ -145,7 +145,7 @@ module WinJS.KO {
             return lastUpdatedStamp;
         };
 
-        winJSList._array = winJSList.map(function (v) {return v });
+        winJSList._array = getRawArray(winJSList);
 
         winJSList.array = function() {
             var context = DependencyDetection.currentContext();
@@ -156,6 +156,13 @@ module WinJS.KO {
             return winJSList._array;
         };
         return <IObservableArray<any>>winJSList;
+    }
+
+    export function getRawArray<T>(list : WinJS.Binding.List<T>): T[]
+    {
+        if (list instanceof WinJS.Binding.List) {
+            return list.map(function (v) {return v });
+        }
     }
 
     export interface IObservableArray<T> extends WinJS.Binding.List<T> {
@@ -185,8 +192,13 @@ module WinJS.KO {
             return this._winjsObservable.unbind(name, action);
         }
 
-        addProperty(name: string, value): any {
-            var ret = this._winjsObservable.addProperty(name);
+        addComputedProperty(name: string, evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?, destObj?: any, destProp?: string) {
+            this.addProperty(name);
+            computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
+        }
+
+        addProperty(name: string, value?): any {
+            var ret = this._winjsObservable.addProperty(name, value);
             this._addProperty(name);
             return ret;
         }
@@ -250,6 +262,10 @@ module WinJS.KO {
             else if (arguments.length > 1){
                 this._lastUpdatedStamps[name] = updateStamp;
             }
+        }
+
+        _getObservable() {
+            return this;
         }
 
         private _addProperty(name){
