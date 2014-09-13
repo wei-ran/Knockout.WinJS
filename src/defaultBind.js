@@ -64,6 +64,7 @@ var WinJS;
             }
 
             flowControl.type = type;
+            flowControl.source = source;
             var ret = WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
 
             return ret;
@@ -257,40 +258,58 @@ var WinJS;
                 element.winControl = this;
                 this.reload();
             }
-            FlowControl.prototype._createChildElement = function (data, parentContext) {
-                var div = document.createElement("div");
-                var context = DataContext.createObservableDataContext(data, parentContext);
-                context.addProperty("$index", -1);
-                div["_winjs_ko_dataContext"] = context;
-                this._template.render(data, div);
-                return div;
-            };
-
             FlowControl.prototype.reload = function () {
                 var _this = this;
-                if (this._data && this._template) {
-                    var child = this.element.lastElementChild;
-                    while (this.element.childElementCount > 0) {
+                var removeChildren = function () {
+                    while (_this.element.childElementCount > 0) {
+                        var child = _this.element.lastElementChild;
                         if (typeof child["dispose"] == "function") {
                             child["dispose"]();
                         }
 
                         var childContext = child["_winjs_ko_dataContext"];
-                        if (typeof childContext["dispose"] == "function") {
+                        if (childContext && typeof childContext["dispose"] == "function") {
                             childContext["dispose"]();
                         }
 
-                        this.element.removeChild(child);
+                        _this.element.removeChild(child);
                     }
+                };
 
+                var createElementWithDataContext = function (data, newContext, parentContext, index) {
+                    var div = document.createElement("div");
+                    if (newContext) {
+                        var context = DataContext.createObservableDataContext(data, parentContext);
+                        if (arguments.length >= 4) {
+                            context.addProperty("$index", index);
+                        }
+                        div["_winjs_ko_dataContext"] = context;
+                    }
+                    _this._template.render(data, div);
+                    return div;
+                };
+
+                var createChildElement = function (data, newContext, parentContext) {
+                    var childElement = createElementWithDataContext(data, newContext, parentContext);
+                    _this.element.appendChild(childElement);
+                };
+
+                removeChildren();
+
+                if (this._template) {
                     switch (this._type) {
                         case "with":
-                            var childElement = this._createChildElement(this._data, this._parentContext);
-                            this.element.appendChild(childElement);
+                            createChildElement(this._data, true, this._parentContext);
                             break;
                         case "if":
+                            if (this._data) {
+                                createChildElement(this._source, false);
+                            }
                             break;
                         case "ifnot":
+                            if (!this._data) {
+                                createChildElement(this._source, false);
+                            }
                             break;
                         case "foreach":
                             var dataContex = DataContext.createObservableDataContext(this._data, this._parentContext);
@@ -311,13 +330,14 @@ var WinJS;
                                     if (child) {
                                         _this.element.removeChild(child);
                                     } else {
-                                        child = _this._createChildElement(item, dataContex);
+                                        child = createElementWithDataContext(item, true, dataContex, index);
                                         child._winjs_ko_dataItem = item;
                                     }
                                     return child;
                                 });
 
-                                //disposeChildNodes(dest);
+                                removeChildren();
+
                                 children.forEach(function (child, index) {
                                     child["_winjs_ko_dataContext"].$index(index);
                                     _this.element.appendChild(child);
@@ -339,8 +359,10 @@ var WinJS;
                     return this._data;
                 },
                 set: function (data) {
-                    this._data = data;
-                    this.reload();
+                    if (data !== this._data) {
+                        this._data = data;
+                        this.reload();
+                    }
                 },
                 enumerable: true,
                 configurable: true
@@ -352,8 +374,10 @@ var WinJS;
                     return this._template;
                 },
                 set: function (template) {
-                    this._template = template;
-                    this.reload();
+                    if (template !== this._template) {
+                        this._template = template;
+                        this.reload();
+                    }
                 },
                 enumerable: true,
                 configurable: true
@@ -365,8 +389,25 @@ var WinJS;
                     return this.type;
                 },
                 set: function (type) {
-                    this._type = type;
-                    this.reload();
+                    if (type !== this._type) {
+                        this._type = type;
+                        this.reload();
+                    }
+                },
+                enumerable: true,
+                configurable: true
+            });
+
+
+            Object.defineProperty(FlowControl.prototype, "source", {
+                get: function () {
+                    return this._source;
+                },
+                set: function (source) {
+                    if (source !== this._source) {
+                        this._source = source;
+                        this.reload();
+                    }
                 },
                 enumerable: true,
                 configurable: true

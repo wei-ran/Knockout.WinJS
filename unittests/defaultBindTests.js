@@ -77,17 +77,19 @@ var WinJS;
             }
 
             function ifBind(complete) {
-                var o = wko.observable(false);
+                var o = wko.observable({ visible: false, t2: null });
                 var div = document.createElement("div");
-                div.innerHTML = "<div>test1</div><div>test2</div>";
+                div.innerHTML = "<div id=\"test1\" data-win-bind=\"textContent: t2\"></div>";
                 document.body.appendChild(div);
-                div.setAttribute(WinJSBindingAttribute, "_if : value WinJS.KO.defaultBind");
+                div.setAttribute("data-win-control", "WinJS.KO.FlowControl");
+                div.setAttribute(WinJSBindingAttribute, "$if : visible WinJS.KO.defaultBind");
                 wb.processAll(div, o.bindable()).then(function () {
                     assert.equal(div.hasChildNodes(), false);
                     div.innerHTML = "<div>test3</div>";
-                    o.value(true);
+                    o.visible(true);
+                    o.t2("hello");
                     _scheduleNTimes(0, 10).then(function () {
-                        assert.equal(div.innerHTML, "<div>test3</div><div>test1</div><div>test2</div>");
+                        assert.equal(document.getElementById("test1").textContent, "hello");
                         document.body.removeChild(div);
                         complete();
                     });
@@ -95,17 +97,19 @@ var WinJS;
             }
 
             function ifNotBind(complete) {
-                var o = wko.observable(true);
+                var o = wko.observable({ visible: true, t2: null });
                 var div = document.createElement("div");
-                div.innerHTML = "<div>test1</div><div>test2</div>";
+                div.innerHTML = "<div id=\"test1\" data-win-bind=\"textContent: t2\"></div>";
                 document.body.appendChild(div);
-                div.setAttribute(WinJSBindingAttribute, "ifnot : value WinJS.KO.defaultBind");
+                div.setAttribute("data-win-control", "WinJS.KO.FlowControl");
+                div.setAttribute(WinJSBindingAttribute, "$ifnot : visible WinJS.KO.defaultBind");
                 wb.processAll(div, o.bindable()).then(function () {
                     assert.equal(div.hasChildNodes(), false);
                     div.innerHTML = "<div>test3</div>";
-                    o.value(false);
+                    o.visible(false);
+                    o.t2("hello");
                     _scheduleNTimes(0, 10).then(function () {
-                        assert.equal(div.innerHTML, "<div>test3</div><div>test1</div><div>test2</div>");
+                        assert.equal(document.getElementById("test1").textContent, "hello");
                         document.body.removeChild(div);
                         complete();
                     });
