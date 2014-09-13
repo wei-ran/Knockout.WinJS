@@ -2,6 +2,8 @@
 //All Rights Reserved.
 //Licensed under the Apache License, Version 2.0.
 //See License.txt in the project root for license information.
+/// <reference path="../typings/winjs/winjs.d.ts" />
+
 module WinJS.KO {
  
     export var observable = function (data): any {
