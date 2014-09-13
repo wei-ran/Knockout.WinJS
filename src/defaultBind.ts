@@ -70,11 +70,16 @@ module WinJS.KO {
             flowControl = new WinJS.KO.FlowControl(dest);
         }
 
-        flowControl.type = type;
-        flowControl.source = source;
-        var ret = WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
-
-        return ret;
+        if (flowControl) {
+            flowControl.type = type;
+            flowControl.source = source;
+            return WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
+        }
+        else {
+            return {
+                cancel: function () { }
+            }
+        }
     }
 
     function foreachBind(source, sourceProps: string[], dest: HTMLElement) : ICancelable {
@@ -268,11 +273,15 @@ module WinJS.KO {
             this._data = options["data"];
             this._template = options["tempate"] || _createChildTemplate(element)
             this._type = options["type"];
+            this._source = options["source"];
             this.element = element;
             this._parentContext = DataContext.getDataContextFromElement(this.element);
-            this._dataContext = DataContext.createObservableDataContext(this._data, this._parentContext);
             element.winControl = this;
             this.reload();
+        }
+
+        dispose = function() {
+            this._disposeChildren();
         }
 
         element: HTMLElement;
@@ -281,26 +290,9 @@ module WinJS.KO {
         _data: any;
         _template: WinJS.Binding.Template;
         _type: string;
-        _dataContext: any;
         _parentContext: any;
 
         reload() {
-            var removeChildren = () => {
-                while (this.element.childElementCount > 0) {
-                    var child = this.element.lastElementChild;
-                    if (typeof child["dispose"] == "function") {
-                        child["dispose"]();
-                    }
-
-                    var childContext = child["_winjs_ko_dataContext"];
-                    if (childContext && typeof childContext["dispose"] == "function") {
-                        childContext["dispose"]();
-                    }
-
-                    this.element.removeChild(child);
-                }
-            }
-
             var createElementWithDataContext = (data, newContext: boolean, parentContext?, index?: number): HTMLElement => {
                 var div = document.createElement("div");
                 if (newContext) {
@@ -310,7 +302,9 @@ module WinJS.KO {
                     }
                     div["_winjs_ko_dataContext"] = context;
                 }
-                this._template.render(data, div);
+                if (data) {
+                    this._template.render(data, div);
+                }
                 return div;
             }
 
@@ -319,13 +313,10 @@ module WinJS.KO {
                 this.element.appendChild(childElement);
             }
 
-            removeChildren();
+            this._disposeChildren();
 
             if (this._template) {
                 switch (this._type) {
-                    case "with":
-                        createChildElement(this._data, true, this._parentContext);
-                        break;
                     case "if":
                         if (this._data) {
                             createChildElement(this._source, false);
@@ -335,6 +326,9 @@ module WinJS.KO {
                         if (!this._data) {
                             createChildElement(this._source, false);
                         }
+                        break;
+                    case "with":
+                        createChildElement(this._data, true, this._parentContext);
                         break;
                     case "foreach":
                         var dataContex = DataContext.createObservableDataContext(this._data, this._parentContext);
@@ -362,7 +356,7 @@ module WinJS.KO {
                                 return child;
                             });
 
-                            removeChildren();
+                            this._disposeChildren();
 
                             children.forEach((child, index: number) => {
                                 child["_winjs_ko_dataContext"].$index(index);
@@ -423,6 +417,22 @@ module WinJS.KO {
             if (source !== this._source) {
                 this._source = source;
                 this.reload();
+            }
+        }
+
+        _disposeChildren() {
+            while (this.element.childElementCount > 0) {
+                var child = this.element.lastElementChild;
+                if (typeof child["dispose"] == "function") {
+                    child["dispose"]();
+                }
+
+                var childContext = child["_winjs_ko_dataContext"];
+                if (childContext && typeof childContext["dispose"] == "function") {
+                    childContext["dispose"]();
+                }
+
+                this.element.removeChild(child);
             }
         }
 

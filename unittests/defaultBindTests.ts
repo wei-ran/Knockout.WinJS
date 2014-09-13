@@ -92,12 +92,75 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
+    function _createFlowControl() {
+        var div = document.createElement("div");
+        div.setAttribute("data-win-control", "WinJS.KO.FlowControl");
+        return div;
+    }
+
+    function withBind(complete) {
+        var o = wko.observable({ t1: wko.observable({ t2: wko.observable({ t3: "a" }) })});
+        var div = _createFlowControl();
+        div.innerHTML = "<div data-win-control=\"WinJS.KO.FlowControl\" data-win-bind=\"$with : t2\"><div id=\"test1\" data-win-bind=\"textContent : t3\"></div></div>";
+        document.body.appendChild(div);
+        div.setAttribute(WinJSBindingAttribute, "$with : t1 WinJS.KO.defaultBind");
+        wb.processAll(div, o.bindable()).then(() => {
+            assert.equal(document.getElementById("test1").textContent, "a");
+            o.t1().t2().t3("b");
+            _scheduleNTimes(0, 10).then(() => {
+                assert.equal(document.getElementById("test1").textContent, "b");
+                o.t1().t2({ t3: "c" });
+                _scheduleNTimes(0, 10).then(() => {
+                    assert.equal(document.getElementById("test1").textContent, "c");
+                    o.t1({ t2: { t3: "d" } });
+                    _scheduleNTimes(0, 10).then(() => {
+                        assert.equal(document.getElementById("test1").textContent, "d");
+                        document.body.removeChild(div);
+                        complete();
+                    });
+                });
+            });
+        });
+    }
+
+    function foreachBind(complete) {
+        var c1 = wko.observable({ t1: "a" });
+        var o = wko.observableArray([c1]);
+        var b = wko.observable({ t0: o});
+        var div = _createFlowControl();
+        div.innerHTML = "<div class=\"test1\" data-win-bind=\"textContent : t1\"></div>";
+        document.body.appendChild(div);
+        div.setAttribute(WinJSBindingAttribute, "$foreach : t0 WinJS.KO.defaultBind");
+        wb.processAll(div, b.bindable()).then(() => {
+            var c = div.getElementsByClassName("test1");
+            assert.equal(c[0].textContent, "a");
+            c1.t1("b");
+            _scheduleNTimes(0, 10).then(() => {
+                c = div.getElementsByClassName("test1");
+                assert.equal(c[0].textContent, "b");
+                o.splice(0, 0, { t1: "c" });
+                _scheduleNTimes(0, 10).then(() => {
+                    c = div.getElementsByClassName("test1");
+                    assert.equal(c[0].textContent, "c");
+                    assert.equal(c[1].textContent, "b");
+                    o.pop();
+                    _scheduleNTimes(0, 10).then(() => {
+                        c = div.getElementsByClassName("test1");
+                        assert.equal(c[0].textContent, "c");
+                        assert.equal(c.length, 1);
+                        document.body.removeChild(div);
+                        complete();
+                    });
+                });
+            });
+        });
+    }
+
     function ifBind(complete) {
         var o = wko.observable({visible: false, t2: null});
-        var div = document.createElement("div");
+        var div = _createFlowControl();
         div.innerHTML = "<div id=\"test1\" data-win-bind=\"textContent: t2\"></div>";
         document.body.appendChild(div);
-        div.setAttribute("data-win-control", "WinJS.KO.FlowControl");
         div.setAttribute(WinJSBindingAttribute, "$if : visible WinJS.KO.defaultBind");
         wb.processAll(div, o.bindable()).then(() => {
             assert.equal(div.hasChildNodes(), false);
@@ -114,10 +177,9 @@ module WinJS.Knockout.UnitTests {
 
     function ifNotBind(complete) {
         var o = wko.observable({ visible: true, t2: null });
-        var div = document.createElement("div");
+        var div = _createFlowControl();
         div.innerHTML = "<div id=\"test1\" data-win-bind=\"textContent: t2\"></div>";
         document.body.appendChild(div);
-        div.setAttribute("data-win-control", "WinJS.KO.FlowControl");
         div.setAttribute(WinJSBindingAttribute, "$ifnot : visible WinJS.KO.defaultBind");
         wb.processAll(div, o.bindable()).then(() => {
             assert.equal(div.hasChildNodes(), false);
@@ -319,6 +381,8 @@ module WinJS.Knockout.UnitTests {
         "Has Focus Bind": hasFocusBind,
         "If Bind": ifBind,
         "If Not Bind": ifNotBind,
+        "With Bind": withBind,
+        "Foreach Bind": foreachBind,
         "Click Bind": clickBind,
         "Submit Bind": submitBind,
         "Enable Bind": enableBind,

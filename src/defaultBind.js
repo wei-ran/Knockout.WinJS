@@ -63,11 +63,16 @@ var WinJS;
                 flowControl = new WinJS.KO.FlowControl(dest);
             }
 
-            flowControl.type = type;
-            flowControl.source = source;
-            var ret = WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
-
-            return ret;
+            if (flowControl) {
+                flowControl.type = type;
+                flowControl.source = source;
+                return WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
+            } else {
+                return {
+                    cancel: function () {
+                    }
+                };
+            }
         }
 
         function foreachBind(source, sourceProps, dest) {
@@ -224,6 +229,9 @@ var WinJS;
 
         var FlowControl = (function () {
             function FlowControl(element, options) {
+                this.dispose = function () {
+                    this._disposeChildren();
+                };
                 options = options || {};
 
                 if (element.winControl) {
@@ -252,30 +260,14 @@ var WinJS;
                 this._data = options["data"];
                 this._template = options["tempate"] || _createChildTemplate(element);
                 this._type = options["type"];
+                this._source = options["source"];
                 this.element = element;
                 this._parentContext = DataContext.getDataContextFromElement(this.element);
-                this._dataContext = DataContext.createObservableDataContext(this._data, this._parentContext);
                 element.winControl = this;
                 this.reload();
             }
             FlowControl.prototype.reload = function () {
                 var _this = this;
-                var removeChildren = function () {
-                    while (_this.element.childElementCount > 0) {
-                        var child = _this.element.lastElementChild;
-                        if (typeof child["dispose"] == "function") {
-                            child["dispose"]();
-                        }
-
-                        var childContext = child["_winjs_ko_dataContext"];
-                        if (childContext && typeof childContext["dispose"] == "function") {
-                            childContext["dispose"]();
-                        }
-
-                        _this.element.removeChild(child);
-                    }
-                };
-
                 var createElementWithDataContext = function (data, newContext, parentContext, index) {
                     var div = document.createElement("div");
                     if (newContext) {
@@ -285,7 +277,9 @@ var WinJS;
                         }
                         div["_winjs_ko_dataContext"] = context;
                     }
-                    _this._template.render(data, div);
+                    if (data) {
+                        _this._template.render(data, div);
+                    }
                     return div;
                 };
 
@@ -294,13 +288,10 @@ var WinJS;
                     _this.element.appendChild(childElement);
                 };
 
-                removeChildren();
+                this._disposeChildren();
 
                 if (this._template) {
                     switch (this._type) {
-                        case "with":
-                            createChildElement(this._data, true, this._parentContext);
-                            break;
                         case "if":
                             if (this._data) {
                                 createChildElement(this._source, false);
@@ -310,6 +301,9 @@ var WinJS;
                             if (!this._data) {
                                 createChildElement(this._source, false);
                             }
+                            break;
+                        case "with":
+                            createChildElement(this._data, true, this._parentContext);
                             break;
                         case "foreach":
                             var dataContex = DataContext.createObservableDataContext(this._data, this._parentContext);
@@ -336,7 +330,7 @@ var WinJS;
                                     return child;
                                 });
 
-                                removeChildren();
+                                _this._disposeChildren();
 
                                 children.forEach(function (child, index) {
                                     child["_winjs_ko_dataContext"].$index(index);
@@ -413,6 +407,22 @@ var WinJS;
                 configurable: true
             });
 
+
+            FlowControl.prototype._disposeChildren = function () {
+                while (this.element.childElementCount > 0) {
+                    var child = this.element.lastElementChild;
+                    if (typeof child["dispose"] == "function") {
+                        child["dispose"]();
+                    }
+
+                    var childContext = child["_winjs_ko_dataContext"];
+                    if (childContext && typeof childContext["dispose"] == "function") {
+                        childContext["dispose"]();
+                    }
+
+                    this.element.removeChild(child);
+                }
+            };
 
             FlowControl.cctor = (function () {
                 WinJS.Utilities.markSupportedForProcessing(FlowControl);
