@@ -27,7 +27,7 @@ module.exports = function (grunt) {
                     latest: true,
 
                     // optional: specify config file
-                    config: './tsd.json',
+                    config: '<%= meta.basePath %>/tsd.json',
 
                     // experimental: options to pass to tsd.API
                     opts: {
@@ -39,10 +39,9 @@ module.exports = function (grunt) {
 
         typescript: {
             base: {
-                src: ['src/*.ts'],
-                dest: 'bin/Knockout.WinJS.js',
+                src: ['<%= meta.srcPath %>/*.ts'],
+                dest: '<%= meta.deployPath %>/Knockout.WinJS.js',
                 options: {
-                    //module: 'amd', //or commonjs
                     target: 'es5', //or es3
                     basePath: '.',
                     sourceMap: true,
@@ -50,6 +49,14 @@ module.exports = function (grunt) {
                 }
             }
         },
+
+        uglify: {
+            my_target: {
+                files: {
+                    '<%= meta.deployPath %>/Knockout.WinJS.min.js': ['<%= meta.deployPath %>/Knockout.WinJS.js']
+                }
+            }
+        }
 
         //concat: {
         //    options: {
@@ -66,7 +73,9 @@ module.exports = function (grunt) {
 
     grunt.loadNpmTasks('grunt-typescript');
 
+    grunt.loadNpmTasks('grunt-contrib-uglify');
+
     // Default task
-    grunt.registerTask('default', ['tsd'], ['typescript']);
+    grunt.registerTask('default', ['tsd', 'typescript', 'uglify']);
 
 };

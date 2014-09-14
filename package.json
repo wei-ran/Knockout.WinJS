@@ -23,11 +23,7 @@
     "grunt-contrib-concat": "~0.5.0",
     "load-grunt-tasks": "^0.6.0",
     "qunitjs": "~1.14.0",
-    "grunt-contrib-jshint": "~0.10.0",
-    "minimist": "0.2.0",
     "grunt-contrib-uglify": "^0.5.1",
-    "grunt-contrib-connect": "^0.8.0",
-    "grunt-contrib-requirejs": "^0.4.4",
     "grunt-tsd":"^0.1.0",
     "grunt-typescript": "^0.3.8"
   }
