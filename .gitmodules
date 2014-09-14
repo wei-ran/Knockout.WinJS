@@ -1,0 +1,3 @@
+[submodule "winjs"]
+	path = winjs
+	url = https://github.com/winjs/winjs.git
