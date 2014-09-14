@@ -10,7 +10,8 @@ module.exports = function (grunt) {
         meta: {
             basePath: './',
             srcPath: './src/',
-            deployPath: './bin/'
+            deployPath: './bin/',
+            unittestsPath : "./unittests/"
         },
 
         banner: '/*! <%= pkg.name %> - v<%= pkg.version %> - ' +
@@ -47,7 +48,28 @@ module.exports = function (grunt) {
                     sourceMap: true,
                     declaration: true
                 }
+            },
+            observableTests: {
+                src: ['<%= meta.srcPath %>/*.ts', '<%= meta.unittestsPath %>/observableTests.ts'],
+                dest: '<%= meta.deployPath %>/unittests/observableTests.js',
+                options: {
+                    target: 'es5', //or es3
+                    basePath: '.',
+                    sourceMap: true,
+                    declaration: false
+                }
+            },
+            defaultBindTests: {
+                src: ['<%= meta.srcPath %>/*.ts', '<%= meta.unittestsPath %>/defaultBindTests.ts'],
+                dest: '<%= meta.deployPath %>/unittests/defaultBindTests.js',
+                options: {
+                    target: 'es5', //or es3
+                    basePath: '.',
+                    sourceMap: true,
+                    declaration: false
+                }
             }
+    
         },
 
         uglify: {
@@ -55,6 +77,15 @@ module.exports = function (grunt) {
                 files: {
                     '<%= meta.deployPath %>/Knockout.WinJS.min.js': ['<%= meta.deployPath %>/Knockout.WinJS.js']
                 }
+            }
+        },
+
+        copy: {
+            tests: {
+                files: [
+                  // includes files within path
+                  { expand: true, src: ['<%= meta.unittestsPath %>/*.html'], dest: '<%= meta.deployPath %>/', filter: 'isFile' },
+                ]
             }
         }
 
@@ -75,7 +106,10 @@ module.exports = function (grunt) {
 
     grunt.loadNpmTasks('grunt-contrib-uglify');
 
+    grunt.loadNpmTasks('grunt-contrib-copy');
+
+
     // Default task
-    grunt.registerTask('default', ['tsd', 'typescript', 'uglify']);
+    grunt.registerTask('default', ['tsd', 'typescript', 'uglify', 'copy']);
 
 };
