@@ -1,4 +1,10 @@
 bin/
+obj/
 node_modules/
 typings/
-
+src/*.js
+src/*.js.map
+unittests/*.js
+unittests/*.js.map
+Knockout.WinJS.csproj.user
+Knockout.WinJS.v12.suo

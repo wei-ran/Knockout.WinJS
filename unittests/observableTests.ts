@@ -36,14 +36,14 @@ module WinJS.Knockout.UnitTests {
     var premativeObservableBind = function (complete) {
         QUnit.expect(3);
         var o = wko.observable(1);
-        assert.equal(o.value(), 1);
+        assert.equal(o.value, 1);
 
         var input = document.createElement("input");
         document.body.appendChild(input);
         input.setAttribute(WinJSBindingAttribute, "value : value");
-        wb.processAll(input, o.bindable()).then(() => {
+        wb.processAll(input, o).then(() => {
             assert.equal(input.value, 1);
-            o.value(2);
+            o.value = 2;
             promise.timeout(0).then(() => {
                 assert.equal(input.value, 2);
                 document.body.removeChild(input);
@@ -56,14 +56,14 @@ module WinJS.Knockout.UnitTests {
         QUnit.expect(3);
 
         var o = wko.observable({t1: 1, t2:2});
-        assert.equal(o.t1(), 1);
+        assert.equal(o.t1, 1);
 
         var input = document.createElement("input");
         document.body.appendChild(input);
         input.setAttribute(WinJSBindingAttribute, "value : t1");
-        wb.processAll(input, o.bindable()).then(() => {
+        wb.processAll(input, o).then(() => {
             assert.equal(input.value, 1);
-            o.t1(2);
+            o.t1 = 2;
             promise.timeout(0).then(() => {
                 assert.equal(input.value, 2);
                 document.body.removeChild(input);
@@ -77,18 +77,18 @@ module WinJS.Knockout.UnitTests {
 
         var o = wko.observable({ t1: 1, t2: 2 });
         var c = wko.computed(() => {
-            return o.t1() + o.t2();
+            return o.t1 + o.t2;
         });
 
-        assert.equal(c.value(), 3);
+        assert.equal(c.value, 3);
 
         var input = document.createElement("input");
         document.body.appendChild(input);
         input.setAttribute(WinJSBindingAttribute, "value : value");
-        wb.processAll(input, c.bindable()).then(() => {
+        wb.processAll(input, c).then(() => {
             assert.equal(input.value, 3);
-            o.t1(2);
-            o.t2(3)
+            o.t1 = 2;
+            o.t2 = 3;
             promise.timeout(0).then(() => {
                 assert.equal(input.value, 5);
                 document.body.removeChild(input);
@@ -101,19 +101,19 @@ module WinJS.Knockout.UnitTests {
         QUnit.expect(3);
 
         var o = wko.observable({ t1: 1, t2: 2, t3: 0 });
-        o.t3.computed(() => {
-            return o.t1() + o.t2();
+        o.computed("t3", () => {
+            return o.t1 + o.t2;
         });
 
-        assert.equal(o.t3(), 3);
+        assert.equal(o.t3, 3);
 
         var input = document.createElement("input");
         document.body.appendChild(input);
         input.setAttribute(WinJSBindingAttribute, "value : t3");
-        wb.processAll(input, o.bindable()).then(() => {
+        wb.processAll(input, o).then(() => {
             assert.equal(input.value, 3);
-            o.t1(2);
-            o.t2(4)
+            o.t1 = 2;
+            o.t2 = 4;
             promise.timeout(0).then(() => {
                 assert.equal(input.value, 6);
                 document.body.removeChild(input);
@@ -127,14 +127,14 @@ module WinJS.Knockout.UnitTests {
 
         var o = wko.observable({ t1: 1, t2: 2, t3: 0 });
         wko.computed(() => {
-            return o.t1() + o.t2();
+            return o.t1 + o.t2;
         }, null, null, o, "t3");
 
-        assert.equal(o.t3(), 3);
-        o.t1(3);
-        o.t2(4)
+        assert.equal(o.t3, 3);
+        o.t1 = 3;
+        o.t2 = 4;
         _scheduleNTimes(0, 50).then(() => {
-            assert.equal(o.t3(), 7);
+            assert.equal(o.t3, 7);
             complete();
         });
     }
