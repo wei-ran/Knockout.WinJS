@@ -79,7 +79,7 @@ module WinJS.KO {
             if (_computed._lastUpdatedStamp) {
                 var lastUpdatedStamp = <UpdateStamp>_computed._lastUpdatedStamp(_propName);
                 if (!lastUpdatedStamp || lastUpdatedStamp.lessThan(updateStamp)) {
-                    _computed.setProperty(_propName, value, updateStamp);
+                    _computed.updateProperty(_propName, value, updateStamp);
                 }
             } else {
                 _computed[_propName] = value;
@@ -197,7 +197,7 @@ module WinJS.KO {
         var _updateProperty : Function = winjsObservable.updateProperty;
 
         winjsObservable.updateProperty = function(name: string, value: any, updateStamp?: UpdateStamp) {
-            var property = this[name];
+            //var property = this[name];
             var context = DependencyDetection.currentContext();
             if (context && context.type == DependencyDetectionContext.COMPUTED_WRITER) {
                 var lastUpdateStamp = this._lastUpdatedStamp(name);
@@ -305,10 +305,13 @@ module WinJS.KO {
         if (context) {
             if (context.type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) { //initial computed evaluator
                 var observableProperty = context.observableProperty;
+
+                if (!observableProperty || (observableProperty._observable === observable && observableProperty._propertyName == name)) {
+                    return;
+                }
+
                 var computed: ComputedProperty = observableProperty._observable._computedProperty(observableProperty._propertyName);
-                //DependencyDetection.execute(null, function () {
-                //    computed = 
-                //});
+                
                     
                 var property = new ObservableProperty(observable, name);
                 var dependencies = <any[]>(computed._dependencies || []);
@@ -319,7 +322,9 @@ module WinJS.KO {
                 };
                 computed._dependencies = dependencies;
 
-                observable.bind(name, computed._computedUpdater);
+                DependencyDetection.execute(null, function () {
+                    observable.bind(name, computed._computedUpdater);
+                });
             }
         }
     }
