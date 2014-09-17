@@ -261,7 +261,7 @@ module WinJS.KO {
         }
 
         winjsObservable.peek = function (name: string) {
-            _getProperty.call(this, name);
+            return _getProperty.call(this, name);
         }
 
         winjsObservable.computed = function (name: string, evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?) {

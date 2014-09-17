@@ -359,7 +359,7 @@ module WinJS.KO {
                             this._disposeChildren();
 
                             children.forEach((child, index: number) => {
-                                child["_winjs_ko_dataContext"].$index(index);
+                                child["_winjs_ko_dataContext"].$index = index;
                                 this.element.appendChild(child);
                             });
                         }
@@ -473,7 +473,7 @@ module WinJS.KO {
             dataContext.data(data);
             if (parent) {
                 dataContext.$parentContexts = [parent];
-                dataContext.$parentContexts.concat(parent.$parentContexts());
+                dataContext.$parentContexts.concat(parent.$parentContexts);
                 dataContext.$parentContext = parent;
             }
             else {
@@ -485,19 +485,19 @@ module WinJS.KO {
 
             if (parent) {
                 dataContextObservable.addComputedProperty("$parents", function () {
-                    return dataContextObservable.$parentContexts.peek().map(function (p) {
-                        return p.$data();
+                    return dataContextObservable.peek("$parentContexts").map(function (p) {
+                        return p.$data;
                     });
                 });
 
                 dataContextObservable.addComputedProperty("$parent", function () {
-                    return dataContextObservable.$parentContext.peek().$data();
+                    return dataContextObservable.peek("$parentContext").$data;
                 });
 
                 dataContextObservable.addComputedProperty("$root", function () {
-                    var parentContexts: any[] = dataContextObservable.$parentContexts.peek();
+                    var parentContexts: any[] = dataContextObservable.peek("$parentContexts");
                     if (parentContexts.length > 0) {
-                        return parentContexts[parentContexts.length - 1].$data();
+                        return parentContexts[parentContexts.length - 1].$data;
                     }
                 });
             }

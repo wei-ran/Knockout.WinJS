@@ -39,10 +39,10 @@ module WinJS.Knockout.UnitTests {
         var div = document.createElement("div");
         document.body.appendChild(div);
         div.setAttribute(WinJSBindingAttribute, "visible : value WinJS.KO.defaultBind");
-        wb.processAll(div, o.bindable()).then(() => {
+        wb.processAll(div, o).then(() => {
             assert.equal(div.style.display, "none");
             
-            o.value(true);
+            o.value = true;
             _scheduleNTimes(0, 10).then(() => {
                 assert.ok(!div.style.display);
                 document.body.removeChild(div);
@@ -60,12 +60,12 @@ module WinJS.Knockout.UnitTests {
         document.body.appendChild(em);
         span.setAttribute(WinJSBindingAttribute, "text : t1 WinJS.KO.defaultBind");
         em.setAttribute(WinJSBindingAttribute, "text : t2 WinJS.KO.defaultBind");
-        wb.processAll(document.body, o.bindable()).then(() => {
+        wb.processAll(document.body, o).then(() => {
             assert.equal(span.textContent, "<div>hello</div>");
             assert.equal(em.textContent, "hello");
 
-            o.t1("hello");
-            o.t2("<div>hello</div>");
+            o.t1 = "hello";
+            o.t2 = "<div>hello</div>";
             _scheduleNTimes(0, 10).then(() => {
                 assert.equal(em.textContent, "<div>hello</div>");
                 assert.equal(span.textContent, "hello");
@@ -81,9 +81,9 @@ module WinJS.Knockout.UnitTests {
         var div = document.createElement("div");
         document.body.appendChild(div);
         div.setAttribute(WinJSBindingAttribute, "html : value WinJS.KO.defaultBind");
-        wb.processAll(div, o.bindable()).then(() => {
+        wb.processAll(div, o).then(() => {
             assert.equal(div.innerHTML, "test1");
-            o.value("<div>test</div>");
+            o.value = "<div>test</div>";
             _scheduleNTimes(0, 10).then(() => {
                 assert.equal(div.innerHTML, "<div>test</div>");
                 document.body.removeChild(div);
@@ -104,15 +104,15 @@ module WinJS.Knockout.UnitTests {
         div.innerHTML = "<div data-win-control=\"WinJS.KO.FlowControl\" data-win-bind=\"$with : t2\"><div id=\"test1\" data-win-bind=\"textContent : t3\"></div></div>";
         document.body.appendChild(div);
         div.setAttribute(WinJSBindingAttribute, "$with : t1 WinJS.KO.defaultBind");
-        wb.processAll(div, o.bindable()).then(() => {
+        wb.processAll(div, o).then(() => {
             assert.equal(document.getElementById("test1").textContent, "a");
-            o.t1().t2().t3("b");
+            o.t1.t2.t3 = "b";
             _scheduleNTimes(0, 10).then(() => {
                 assert.equal(document.getElementById("test1").textContent, "b");
-                o.t1().t2({ t3: "c" });
+                o.t1.t2 = { t3: "c" };
                 _scheduleNTimes(0, 10).then(() => {
                     assert.equal(document.getElementById("test1").textContent, "c");
-                    o.t1({ t2: { t3: "d" } });
+                    o.t1 = { t2: { t3: "d" } };
                     _scheduleNTimes(0, 10).then(() => {
                         assert.equal(document.getElementById("test1").textContent, "d");
                         document.body.removeChild(div);
@@ -131,10 +131,10 @@ module WinJS.Knockout.UnitTests {
         div.innerHTML = "<div class=\"test1\" data-win-bind=\"textContent : t1\"></div>";
         document.body.appendChild(div);
         div.setAttribute(WinJSBindingAttribute, "$foreach : t0 WinJS.KO.defaultBind");
-        wb.processAll(div, b.bindable()).then(() => {
+        wb.processAll(div, b).then(() => {
             var c = div.getElementsByClassName("test1");
             assert.equal(c[0].textContent, "a");
-            c1.t1("b");
+            c1.t1 = "b";
             _scheduleNTimes(0, 10).then(() => {
                 c = div.getElementsByClassName("test1");
                 assert.equal(c[0].textContent, "b");
@@ -162,11 +162,11 @@ module WinJS.Knockout.UnitTests {
         div.innerHTML = "<div id=\"test1\" data-win-bind=\"textContent: t2\"></div>";
         document.body.appendChild(div);
         div.setAttribute(WinJSBindingAttribute, "$if : visible WinJS.KO.defaultBind");
-        wb.processAll(div, o.bindable()).then(() => {
+        wb.processAll(div, o).then(() => {
             assert.equal(div.hasChildNodes(), false);
             div.innerHTML = "<div>test3</div>"
-            o.visible(true);
-            o.t2("hello");
+            o.visible = true;
+            o.t2 = "hello";
             _scheduleNTimes(0, 10).then(() => {  
                 assert.equal(document.getElementById("test1").textContent, "hello");
                 document.body.removeChild(div);
@@ -181,11 +181,11 @@ module WinJS.Knockout.UnitTests {
         div.innerHTML = "<div id=\"test1\" data-win-bind=\"textContent: t2\"></div>";
         document.body.appendChild(div);
         div.setAttribute(WinJSBindingAttribute, "$ifnot : visible WinJS.KO.defaultBind");
-        wb.processAll(div, o.bindable()).then(() => {
+        wb.processAll(div, o).then(() => {
             assert.equal(div.hasChildNodes(), false);
             div.innerHTML = "<div>test3</div>"
-            o.visible(false);
-            o.t2("hello");
+            o.visible = false;
+            o.t2 = "hello";
             _scheduleNTimes(0, 10).then(() => {
                 assert.equal(document.getElementById("test1").textContent, "hello");
                 document.body.removeChild(div);
@@ -206,12 +206,12 @@ module WinJS.Knockout.UnitTests {
         var button = document.createElement("button");
         document.body.appendChild(button);
         button.setAttribute(WinJSBindingAttribute, "click : value WinJS.KO.defaultBind");
-        wb.processAll(button, o.bindable()).then(() => {
+        wb.processAll(button, o).then(() => {
             assert.equal(button.onclick, _clickme1);
-            o.value(_clickme2);
+            o.value = _clickme2;
             _scheduleNTimes(0, 10).then(() => {
                 assert.equal(button.onclick, _clickme2);
-                o.value(null);
+                o.value = null;
                 _scheduleNTimes(0, 10).then(() => {
                     assert.equal(button.onclick, null);
                     document.body.removeChild(button);
@@ -240,10 +240,10 @@ module WinJS.Knockout.UnitTests {
         form.appendChild(submit);
        
         form.setAttribute(WinJSBindingAttribute, "submit : value WinJS.KO.defaultBind");
-        wb.processAll(form, o.bindable()).then(() => {
+        wb.processAll(form, o).then(() => {
             submit.click();
             _scheduleNTimes(0, 10).then(() => {
-                o.value(_submit2);
+                o.value = _submit2;
                 _scheduleNTimes(0, 10).then(() => {
                     submit.click();
                     _scheduleNTimes(0, 10).then(() => {
@@ -265,20 +265,20 @@ module WinJS.Knockout.UnitTests {
         input.focus();
         document.body.appendChild(input);
         input.setAttribute(WinJSBindingAttribute, "hasFocus : value WinJS.KO.defaultBind");
-        wb.processAll(input, o.bindable()).then(() => {
+        wb.processAll(input, o).then(() => {
             assert.equal(document.activeElement, input);
             _scheduleNTimes(0, 10).then(() => {
-                o.value(false);
+                o.value = false;
                 _scheduleNTimes(0, 10).then(() => {
                     assert.notEqual(document.activeElement, input);
                     input.focus();
 
                     _scheduleNTimes(0, 10).then(() => {
-                        assert.ok(o.value());
+                        assert.ok(o.value);
                         input.blur();
 
                         _scheduleNTimes(0, 10).then(() => {
-                            assert.ok(!o.value());
+                            assert.ok(!o.value);
                             document.body.removeChild(input);
                             complete();
                         });
@@ -293,9 +293,9 @@ module WinJS.Knockout.UnitTests {
         var input = document.createElement("input");
         document.body.appendChild(input);
         input.setAttribute(WinJSBindingAttribute, "enable : value WinJS.KO.defaultBind");
-        wb.processAll(input, o.bindable()).then(() => {
+        wb.processAll(input, o).then(() => {
             assert.ok(input.disabled);
-            o.value(true);
+            o.value = true;
             _scheduleNTimes(0, 10).then(() => {
                 assert.ok(!input.disabled)
                 document.body.removeChild(input);
@@ -310,9 +310,9 @@ module WinJS.Knockout.UnitTests {
         input.type = "text";
         document.body.appendChild(input);
         input.setAttribute(WinJSBindingAttribute, "value : value WinJS.KO.defaultBind");
-        wb.processAll(input, o.bindable()).then(() => {
+        wb.processAll(input, o).then(() => {
             assert.equal(input.value, "test1");
-            o.value("test2");
+            o.value = "test2";
             _scheduleNTimes(0, 10).then(() => {
                 assert.equal(input.value, "test2");
                 _scheduleNTimes(0, 10).then(() => {
@@ -321,7 +321,7 @@ module WinJS.Knockout.UnitTests {
                     input.oninput(null);
                     _scheduleNTimes(0, 10).then(() => {
                         
-                        assert.equal(o.value(), "test3");
+                        assert.equal(o.value, "test3");
                         document.body.removeChild(input);
                         complete();
                     });
@@ -336,16 +336,16 @@ module WinJS.Knockout.UnitTests {
         input.type = "checkbox";
         document.body.appendChild(input);
         input.setAttribute(WinJSBindingAttribute, "checked : value WinJS.KO.defaultBind");
-        wb.processAll(input, o.bindable()).then(() => {
+        wb.processAll(input, o).then(() => {
             assert.ok(input.checked);
-            o.value(false);
+            o.value = false;
             _scheduleNTimes(0, 10).then(() => {
                 assert.ok(!input.checked);
                 _scheduleNTimes(0, 10).then(() => {
                     input.checked = true;
                     input.onchange(null);
                     _scheduleNTimes(0, 10).then(() => {
-                        assert.ok(o.value());
+                        assert.ok(o.value);
                         document.body.removeChild(input);
                         complete();
                     });
