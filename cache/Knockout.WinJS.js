@@ -329,7 +329,7 @@
                                 _this._disposeChildren();
 
                                 children.forEach(function (child, index) {
-                                    child["_winjs_ko_dataContext"].$index(index);
+                                    child["_winjs_ko_dataContext"].$index = index;
                                     _this.element.appendChild(child);
                                 });
                             };
@@ -460,7 +460,7 @@
                 dataContext.data(data);
                 if (parent) {
                     dataContext.$parentContexts = [parent];
-                    dataContext.$parentContexts.concat(parent.$parentContexts());
+                    dataContext.$parentContexts.concat(parent.$parentContexts);
                     dataContext.$parentContext = parent;
                 } else {
                     dataContext.$parentContexts = [];
@@ -470,19 +470,19 @@
 
                 if (parent) {
                     dataContextObservable.addComputedProperty("$parents", function () {
-                        return dataContextObservable.$parentContexts.peek().map(function (p) {
-                            return p.$data();
+                        return dataContextObservable.peek("$parentContexts").map(function (p) {
+                            return p.$data;
                         });
                     });
 
                     dataContextObservable.addComputedProperty("$parent", function () {
-                        return dataContextObservable.$parentContext.peek().$data();
+                        return dataContextObservable.peek("$parentContext").$data;
                     });
 
                     dataContextObservable.addComputedProperty("$root", function () {
-                        var parentContexts = dataContextObservable.$parentContexts.peek();
+                        var parentContexts = dataContextObservable.peek("$parentContexts");
                         if (parentContexts.length > 0) {
-                            return parentContexts[parentContexts.length - 1].$data();
+                            return parentContexts[parentContexts.length - 1].$data;
                         }
                     });
                 } else {
@@ -523,7 +523,8 @@ var WinJS;
 
             if (_data) {
                 var _observable = WinJS.Binding.as(_data);
-                return new Observable(_observable);
+                CreateObservable(_observable);
+                return _observable;
             }
 
             return _data;
@@ -560,11 +561,13 @@ var WinJS;
             }
 
             var _initVal;
-            var computedProperty = _computed[_propName];
 
-            if (_computed instanceof Observable) {
+            if (_computed.dispose) {
                 _computed.dispose(_propName);
             }
+
+            var computedProperty = new ComputedProperty;
+            _computed._computedProperties[_propName] = computedProperty;
 
             var computedUpdater = function () {
                 var context = DependencyDetection.currentContext();
@@ -582,10 +585,10 @@ var WinJS;
                     }
                 });
 
-                if (_computed instanceof Observable) {
+                if (_computed._lastUpdatedStamp) {
                     var lastUpdatedStamp = _computed._lastUpdatedStamp(_propName);
                     if (!lastUpdatedStamp || lastUpdatedStamp.lessThan(updateStamp)) {
-                        _computed.setProperty(_propName, value, updateStamp);
+                        _computed.updateProperty(_propName, value, updateStamp);
                     }
                 } else {
                     _computed[_propName] = value;
@@ -604,9 +607,9 @@ var WinJS;
                     }
                 };
 
-                if (_computed instanceof Observable) {
+                if (_computed.bind) {
                     DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN), function () {
-                        _computed.bindable().bind(_propName, computedProperty._computedWriter);
+                        _computed.bind(_propName, computedProperty._computedWriter);
                     });
                 } else {
                     throw new Error("A non-observable destionation does not support writer.");
@@ -617,7 +620,7 @@ var WinJS;
 
             DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_INITIAL_EVALUATION, new ObservableProperty(_computed, _propName)), function () {
                 _initVal = evaluator();
-                if (_computed instanceof Observable) {
+                if (_computed.setProperty) {
                     _computed.setProperty(_propName, _initVal);
                 } else {
                     _computed[_propName] = _initVal;
@@ -677,66 +680,40 @@ var WinJS;
         }
         KO.getRawArray = getRawArray;
 
-        var Observable = (function () {
-            function Observable(winjsObservable) {
-                var _this = this;
-                this._winjsObservable = winjsObservable;
-                var data = winjsObservable.backingData;
-                while (data && data !== Object.prototype) {
-                    Object.keys(data).forEach(function (key) {
-                        return _this._addProperty(key);
-                    });
-                    data = Object.getPrototypeOf(data);
-                }
-            }
-            Observable.prototype.bindable = function () {
-                return this._winjsObservable;
-            };
-
-            Observable.prototype.bind = function (name, action) {
-                return this._winjsObservable.bind(name, action);
-            };
-
-            Observable.prototype.unbind = function (name, action) {
-                return this._winjsObservable.unbind(name, action);
-            };
-
-            Observable.prototype.addComputedProperty = function (name, evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, destObj, destProp) {
+        function CreateObservable(winjsObservable) {
+            winjsObservable.addComputedProperty = function (name, evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, destObj, destProp) {
                 this.addProperty(name);
                 KO.computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
             };
 
-            Observable.prototype.addProperty = function (name, value) {
-                var ret = this._winjsObservable.addProperty(name, value);
-                this._addProperty(name);
-                return ret;
-            };
+            var _getProperty = winjsObservable.getProperty;
 
-            Observable.prototype.getProperty = function (name) {
+            winjsObservable.getProperty = function (name) {
                 _bindComputedUpdaterIfNeccessary(this, name);
-
-                return this._winjsObservable.getProperty(name);
+                return _getProperty.call(this, name);
             };
 
-            Observable.prototype.setProperty = function (name, value, updateStamp) {
-                var property = this[name];
+            var _updateProperty = winjsObservable.updateProperty;
+
+            winjsObservable.updateProperty = function (name, value, updateStamp) {
                 var context = DependencyDetection.currentContext();
                 if (context && context.type == DependencyDetectionContext.COMPUTED_WRITER) {
                     var lastUpdateStamp = this._lastUpdatedStamp(name);
                     if (!lastUpdateStamp || lastUpdateStamp.lessThan(context.upateStamp)) {
                         this._lastUpdatedStamp(name, context.upateStamp);
-                        this._winjsObservable.updateProperty(name, value);
+                        _updateProperty.call(this, name, value);
                     }
                 } else {
                     this._lastUpdatedStamp(name, updateStamp || UpdateStamp.newStamp());
-                    this._winjsObservable.updateProperty(name, value);
+                    _updateProperty.call(this, name, value);
                 }
             };
 
-            Observable.prototype.dispose = function (name) {
+            var _dispose = winjsObservable.dispose;
+            winjsObservable.dispose = function (name) {
                 var _this = this;
                 if (arguments.length > 0) {
-                    var property = this[name];
+                    var property = this._computedProperty(name);
                     if (property) {
                         if (property._computedUpdater) {
                             var dependencies = property._dependencies || [];
@@ -753,13 +730,18 @@ var WinJS;
                         }
                     }
                 } else {
+                    if (_dispose) {
+                        _dispose.call(this);
+                    }
                     Object.keys(this).forEach(function (k) {
                         _this.dispose(k);
                     });
                 }
             };
 
-            Observable.prototype._lastUpdatedStamp = function (name, updateStamp) {
+            winjsObservable._lastUpdatedStamps = {};
+
+            winjsObservable._lastUpdatedStamp = function (name, updateStamp) {
                 this._lastUpdatedStamps = this._lastUpdatedStamps || {};
                 if (arguments.length == 1) {
                     return this._lastUpdatedStamps[name];
@@ -768,48 +750,32 @@ var WinJS;
                 }
             };
 
-            Observable.prototype._getObservable = function () {
-                return this;
+            winjsObservable._computedProperties = {};
+            winjsObservable._computedProperty = function (name) {
+                return this._computedProperties[name];
             };
 
-            Observable.prototype._addProperty = function (name) {
-                var _this = this;
-                var prop = (function (value) {
-                    if (arguments.length == 0) {
-                        return _this.getProperty(name);
-                    } else {
-                        return _this.setProperty(name, value);
-                    }
-                });
-
-                this[name] = prop;
-
-                var _peek = function () {
-                    return _this._winjsObservable.getProperty(name);
-                };
-
-                var _computed = function (evaluatorFunctionOrOptions, evaluatorFunctionTarget, options) {
-                    KO.computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, _this, name);
-                };
-
-                var _dispose = function () {
-                    _this.dispose(name);
-                };
-
-                prop.peek = _peek;
-                prop.computed = _computed;
-                prop.dispose = _dispose;
-                return prop;
+            winjsObservable.peek = function (name) {
+                return _getProperty.call(this, name);
             };
-            return Observable;
-        })();
+
+            winjsObservable.computed = function (name, evaluatorFunctionOrOptions, evaluatorFunctionTarget, options) {
+                KO.computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
+            };
+        }
 
         function _bindComputedUpdaterIfNeccessary(observable, name) {
             var context = DependencyDetection.currentContext();
             if (context) {
                 if (context.type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) {
                     var observableProperty = context.observableProperty;
-                    var computed = observableProperty._observable[observableProperty._propertyName];
+
+                    if (!observableProperty || (observableProperty._observable === observable && observableProperty._propertyName == name)) {
+                        return;
+                    }
+
+                    var computed = observableProperty._observable._computedProperty(observableProperty._propertyName);
+
                     var property = new ObservableProperty(observable, name);
                     var dependencies = (computed._dependencies || []);
                     if (!dependencies.some(function (o) {
@@ -820,7 +786,9 @@ var WinJS;
                     ;
                     computed._dependencies = dependencies;
 
-                    observable.bind(name, computed._computedUpdater);
+                    DependencyDetection.execute(null, function () {
+                        observable.bind(name, computed._computedUpdater);
+                    });
                 }
             }
         }
@@ -831,6 +799,12 @@ var WinJS;
                 this._propertyName = propertyName;
             }
             return ObservableProperty;
+        })();
+
+        var ComputedProperty = (function () {
+            function ComputedProperty() {
+            }
+            return ComputedProperty;
         })();
 
         var DependencyDetectionContext = (function () {
