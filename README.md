@@ -1,7 +1,7 @@
 Knockout.WinJS
 ==============
 
-Knockout.WinJS is a Javascript (Typescript) library which is on top of WinJS and helps WinJS developers easier to write WinJS [MVVM](http://en.wikipedia.org/wiki/Model_View_ViewModel) bindings.
+Knockout.WinJS is a Javascript (Typescript) library which is on top of [WinJS](http://try.buildwinjs.com) and helps WinJS developers easier to write WinJS [MVVM](http://en.wikipedia.org/wiki/Model_View_ViewModel) bindings.
 
 It brings some cool features of [Knockout.JS](http://knockoutjs.com/documentation/introduction.html) into WinJS, such as computed observables, automatic dependency tracking, data contexts, flow control bindings, built-in two way bindings, and etc.
 
