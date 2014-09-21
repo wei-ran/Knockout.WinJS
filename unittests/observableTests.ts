@@ -200,12 +200,12 @@ module WinJS.Knockout.UnitTests {
     function computedWriter(complete) {
         var o = wko.observable({ t1: 1, t2: 0, t3: 1 });
         o.computed("t3", {
-            read: () => {
+            read: function(){
                 return 2;
             },
-            write: () => {
-                o.t1 = o.t3 * 2;
-                o.t2 = o.t3 + 1;
+            write: function(value) {
+                this.t1 = value * 2;
+                this.t2 = value + 1;
             }
         });
 
@@ -226,12 +226,12 @@ module WinJS.Knockout.UnitTests {
 
     function computedWriter2(complete) {
         var o = wko.observable({ t1: 1, t2: 0, t3: 1 });
-        o.computed("t2", () => {
-            return o.t1 + 1;
+        o.computed("t2", function() {
+            return this.t1 + 1;
         }, null,
         {
-            write: () => {
-                o.t3 = o.t2 + 2;
+            write: function(value) {
+                this.t3 = value + 2;
             }
         });
 
@@ -286,10 +286,10 @@ module WinJS.Knockout.UnitTests {
         var o = wko.observable({ t1: 1, t2:0 });
         o.computed("t2", {
             read: function () {
-                return o.t1 * 2;
+                return this.t1 * 2;
             },
-            write: function () {
-                o.t1 = o.t2 * 2;
+            write: function (value) {
+                this.t1 = value * 2;
             }
         });
 

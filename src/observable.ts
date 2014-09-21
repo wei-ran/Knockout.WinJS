@@ -33,11 +33,6 @@ module WinJS.KO {
         if (typeof readFunction != "function")
             throw new Error("Pass a function that returns the value of the computed function.");
 
-        evaluatorFunctionTarget = evaluatorFunctionTarget || options["owner"];
-        var evaluator = () => {
-            return evaluatorFunctionTarget ? readFunction.call(evaluatorFunctionTarget) : readFunction();
-        }
-
         var _computed;
         var _propName: string;
 
@@ -48,6 +43,12 @@ module WinJS.KO {
         else {
             _computed = observable(0);
             _propName = "value";
+        }
+
+        evaluatorFunctionTarget = evaluatorFunctionTarget || options["owner"] || _computed;
+
+        var evaluator = () => {
+            return readFunction.call(evaluatorFunctionTarget);
         }
 
         var _initVal;
@@ -107,7 +108,7 @@ module WinJS.KO {
                 if (!context || context.type != DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN) { //skip for the writer initial run
                     context = new DependencyDetectionContext(DependencyDetectionContext.COMPUTED_WRITER, _computed._lastUpdatedStamp(_propName) || UpdateStamp.newStamp());
                     DependencyDetection.execute(context, () => {
-                        evaluatorFunctionTarget ? writer.call(evaluatorFunctionTarget) : writer();
+                         writer.call(evaluatorFunctionTarget, _computed[_propName]);
                     });
                 }
             };
