@@ -27,8 +27,8 @@ module WinJS.KO {
         var data = source;
         if (destProps.length > 0 && _dataContextMemebrs[sourceProps[0]]) {
             var dataContext = DataContext.getDataContextFromElement(dest);
-            if (dataContext && dataContext.bindable)
-                data = dataContext.bindable();
+            if (dataContext)
+                data = dataContext;
         }
 
         if (destProps || destProps.length == 1) {
@@ -456,7 +456,7 @@ module WinJS.KO {
         }
 
         static isObservableDataContext(source): boolean {
-            return source && source.bindable && WinJS.Binding.unwrap(source.bindable()) instanceof DataContext;
+            return source && WinJS.Binding.unwrap(source) instanceof DataContext;
         }
 
         static getDataContextFromElement(element: HTMLElement) {

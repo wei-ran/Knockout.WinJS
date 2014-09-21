@@ -147,7 +147,7 @@ module WinJS.Knockout.UnitTests {
 
         assert.equal(o.value, 2);
 
-        o.value = 3;
+        o.updateProperty("value", 3);
 
         _scheduleNTimes(0, 20).then(() => {
             assert.equal(o.value, 3);
@@ -188,7 +188,7 @@ module WinJS.Knockout.UnitTests {
         assert.equal(o.t1, 3);
         assert.equal(o.t2, 2);
 
-        o.t1 = 2;
+        o.updateProperty("t1", 2);
 
         _scheduleNTimes(0, 100).then(() => {
             assert.equal(o.t2, 4);
@@ -210,8 +210,6 @@ module WinJS.Knockout.UnitTests {
         });
 
         _scheduleNTimes(0, 10).then(() => {
-            assert.equal(o.t1, 4);
-            assert.equal(o.t2, 3);
             assert.equal(o.t3, 2);
 
             o.t3 = 3;
@@ -237,77 +235,96 @@ module WinJS.Knockout.UnitTests {
 
         _scheduleNTimes(0, 10).then(() => {
             assert.equal(o.t2, 2);
-            assert.equal(o.t3, 4);
-
             o.t1 = 3;
-
             _scheduleNTimes(0, 10).then(() => {
                 assert.equal(o.t2, 4);
-                assert.equal(o.t3, 6);
-                complete();
+                assert.equal(o.t3, 1);
+                o.t2 = 2;
+                _scheduleNTimes(0, 10).then(() => {
+                    assert.equal(o.t2, 2);
+                    assert.equal(o.t3, 4);
+                    complete();
+                });
             });
         });
     }
 
     function computedOnwer(complete) {
-        var o = wko.observable({ t1: 1, t2: 0, t3: 1, t4 : 0 });
-        o.computed("t2",function() {
-            return this.t1 + 1;
-        }, o);
+        var o1 = wko.observable({ t1: 1, t2: 2 });
+        var o2 = wko.observable({ t3: 3, t4: 4 });
 
-        o.computed("t3",
+        o1.computed("t2",function() {
+            return this.t3 + o1.t1;
+        }, o2);
+
+        o2.computed("t4",
             {
                 read: function() {
                     return this.t2 + 2;
                 },
-                write: function() {
-                    this.t4 = this.t3 + 3;
+                write: function(value) {
+                    this.t1 = value + 3;
                 },
-                owner : o
+                owner : o1
             });
 
         _scheduleNTimes(0, 100).then(() => {
-            assert.equal(o.t2, 2);
-            assert.equal(o.t3, 4);
-            assert.equal(o.t4, 7);
+            assert.equal(o1.t1, 1);
+            assert.equal(o1.t2, 4);
+            assert.equal(o2.t3, 3);
+            assert.equal(o2.t4, 6);
 
-            o.t1 = 3;
+            o1.t1 = 3;
 
             _scheduleNTimes(0, 10).then(() => {
-                assert.equal(o.t2, 4);
-                assert.equal(o.t3, 6);
-                assert.equal(o.t4, 9);
-                complete();
+                assert.equal(o1.t1, 3);
+                assert.equal(o1.t2, 6);
+                assert.equal(o2.t3, 3);
+                assert.equal(o2.t4, 8);
+                o2.t4 = 5;
+                _scheduleNTimes(0, 10).then(() => {
+                    assert.equal(o1.t1, 8);
+                    assert.equal(o1.t2, 11);
+                    assert.equal(o2.t3, 3);
+                    assert.equal(o2.t4, 5);
+                    complete();
+                });
             });
         });
     }
 
     function simpleCircularComputedWriter(complete) {
-        var o = wko.observable({ t1: 1, t2:0 });
-        o.computed("t2", {
+        var o = wko.observable({ t1: 1, t2: 2, t3: 3 });
+        o.computed("t2", function(){
+            return this.t1 + 1;
+        });
+        o.computed("t3", {
             read: function () {
-                return this.t1 * 2;
+                return this.t2 * 2;
             },
             write: function (value) {
-                this.t1 = value * 2;
+                this.t1 = value + 3;
             }
         });
 
-        _scheduleNTimes(0, 2).then(function () {
-            assert.equal(o.t1, 4);
+        _scheduleNTimes(0, 10).then(function () {
+            assert.equal(o.t1, 1);
             assert.equal(o.t2, 2);
+            assert.equal(o.t3, 4);
 
             o.t1 = 3;
 
             _scheduleNTimes(0, 100).then(function () {
                 assert.equal(o.t1, 3);
-                assert.equal(o.t2, 6);
+                assert.equal(o.t2, 4);
+                assert.equal(o.t3, 8);
 
-                o.t2 = 4;
+                o.t3 = 4;
 
                 _scheduleNTimes(0, 100).then(function () {
-                    assert.equal(o.t1, 8);
-                    assert.equal(o.t2, 4);
+                    assert.equal(o.t1, 7);
+                    assert.equal(o.t2, 8);
+                    assert.equal(o.t3, 4);
                     complete();
                 });
             });
@@ -340,23 +357,30 @@ module WinJS.Knockout.UnitTests {
         o.computed("t2", function () {
             return o.t1 * 2;
         }, null, {
-                write: function () {
-                    o.t3 = o.t2 + 1;
+                write: function (value) {
+                    o.updateProperty("t3", o.t2 + 1);
+                    this.t1 = value * 2;
                 }
             });
+        o.computed("t3", function () {
+            return this.t1 - 2;
+        });
 
         _scheduleNTimes(0, 10).then(() => {
+            assert.equal(o.t1, 1);
             assert.equal(o.t2, 2);
-            assert.equal(o.t3, 3);
-            o.t1 = 2;
+            assert.equal(o.t3, -1);
+            o.t2 = 2;
             _scheduleNTimes(0, 20).then(() => {
-                assert.equal(o.t2, 4);
-                assert.equal(o.t3, 5);
+                assert.equal(o.t1, 4);
+                assert.equal(o.t2, 2);
+                assert.equal(o.t3, 3);
                 o.dispose("t2");
-                o.t1 = 3;
-                _scheduleNTimes(0, 50).then(() => {
-                    assert.equal(o.t2, 4);
-                    assert.equal(o.t3, 5)
+                o.t2 = 3;
+                _scheduleNTimes(0, 100).then(() => {
+                    assert.equal(o.t1, 4);
+                    assert.equal(o.t2, 3);
+                    assert.equal(o.t3, 3);
                     complete();
                 });
             });
