@@ -829,8 +829,9 @@ var WinJS;
                 this._dependencies = [];
             }
             ComputedProperty.prototype._removeAllDependencies = function () {
+                var computedUpdater = this._computedUpdater;
                 this._dependencies.forEach(function (d) {
-                    d._observable.unbind(d._propertyName, this._computedUpdater);
+                    d._observable.unbind(d._propertyName, computedUpdater);
                 });
                 this._dependencies = [];
             };
