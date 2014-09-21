@@ -164,14 +164,19 @@ module WinJS.KO {
 
         winJSList._array = getRawArray(winJSList);
 
-        winJSList.array = function() {
-            var context = DependencyDetection.currentContext();
-            if (context) {
-                _bindComputedUpdaterIfNeccessary(<any>winJSList, "_array");
-            }
+        Object.defineProperty(winJSList, "array", {
+            get: function () {
+                var context = DependencyDetection.currentContext();
+                if (context) {
+                    _bindComputedUpdaterIfNeccessary(<any>winJSList, "_array");
+                }
 
-            return winJSList._array;
-        };
+                return winJSList._array;
+            },
+            enumerable: true,
+            configurable: true
+        });
+
         return <IObservableArray<any>>winJSList;
     }
 
@@ -183,7 +188,7 @@ module WinJS.KO {
     }
 
     export interface IObservableArray<T> extends WinJS.Binding.List<T> {
-        array(): T[];
+        array: T[];
     }
 
     function CreateObservable(winjsObservable) {
@@ -191,12 +196,6 @@ module WinJS.KO {
             this.addProperty(name);
             computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
         }
-
-        //addProperty(name: string, value?): any {
-        //    var ret = this._winjsObservable.addProperty(name, value);
-        //    this._addProperty(name);
-        //    return ret;
-        //}
 
         var _getProperty : Function = winjsObservable.getProperty;
 

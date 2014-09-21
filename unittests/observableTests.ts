@@ -423,7 +423,7 @@ module WinJS.Knockout.UnitTests {
         var a = wko.observableArray([1, 2, 3]);
         var b = wko.computed(() => {
             var sum = 0;
-            a.array().forEach(function (v) {
+            a.array.forEach(function (v) {
                 sum += v;
             });
             return sum;
@@ -444,10 +444,10 @@ module WinJS.Knockout.UnitTests {
         var b = wko.observable({ t1: 0, t2: 1 });
         b.computed("t1", () => {
             var sum = 0;
-            a.array().forEach(function (v) {
+            a.array.forEach(function (v) {
                 sum += v;
             });
-            return sum / a.array().length + b.t2 + b.t2;
+            return sum / a.array.length + b.t2 + b.t2;
         });
 
         assert.equal(b.t1, 4);
@@ -471,7 +471,7 @@ module WinJS.Knockout.UnitTests {
         var calc = WinJS.KO.observable({ sumA: 0 });
         calc.computed("sumA", function () {
             var sum = 0;
-            items.array().forEach(function (v) {
+            items.array.forEach(function (v) {
                 if (v) {
                     sum += v.A;
                 }
