@@ -11,7 +11,7 @@ module WinJS.KO {
 
         if (_data) {
             var _observable = WinJS.Binding.as(_data);
-            CreateObservable(_observable);
+            createObservable(_observable);
             return _observable;
         }
 
@@ -63,7 +63,7 @@ module WinJS.KO {
 
         var computedUpdater = function () {
             var context = DependencyDetection.currentContext();
-            if (context && context.type == DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_INITIAL_BIND) {
+            if (context && context.type == DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_BIND) {
                 return; //triggered by the bind methods in intial evaluation. do nothing
             }
 
@@ -75,7 +75,7 @@ module WinJS.KO {
             });
 
             var dependencies = <ObservableProperty[]>(computedProperty._dependencies || []);
-            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_INITIAL_BIND), function() {
+            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_BIND), function() {
                 dependencies.forEach(function (d) {
                     d._observable.bind(d._propertyName, computedUpdater);
                 });
@@ -103,24 +103,9 @@ module WinJS.KO {
 
         var writer = options["write"];
         if (writer && typeof writer == "function") {
-            computedProperty._computedWriter = function() {
-                var context = DependencyDetection.currentContext();
-                if (!context || context.type != DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN) { //skip for the writer initial run
-                    context = new DependencyDetectionContext(DependencyDetectionContext.COMPUTED_WRITER, _computed._lastUpdatedStamp(_propName) || UpdateStamp.newStamp());
-                    DependencyDetection.execute(context, () => {
-                         writer.call(evaluatorFunctionTarget, _computed[_propName]);
-                    });
-                }
+            computedProperty._computedWriter = function (value) {
+                writer.call(evaluatorFunctionTarget, value);
             };
-
-            if (_computed.bind) {
-                DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN), () => {
-                    _computed.bind(_propName, computedProperty._computedWriter);
-                });
-            }
-            else {
-                throw new Error("A non-observable destionation does not support writer.");
-            }
         }
       
         computedProperty._computedUpdater = computedUpdater;
@@ -192,7 +177,7 @@ module WinJS.KO {
         array: T[];
     }
 
-    function CreateObservable(winjsObservable) {
+    function createObservable(winjsObservable) {
         winjsObservable.addComputedProperty  = function(name: string, evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?, destObj?: any, destProp?: string) {
             this.addProperty(name);
             computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
@@ -207,20 +192,25 @@ module WinJS.KO {
 
         var _updateProperty : Function = winjsObservable.updateProperty;
 
-        winjsObservable.updateProperty = function(name: string, value: any, updateStamp?: UpdateStamp) {
-            //var property = this[name];
-            var context = DependencyDetection.currentContext();
-            if (context && context.type == DependencyDetectionContext.COMPUTED_WRITER) {
-                var lastUpdateStamp = this._lastUpdatedStamp(name);
-                if (!lastUpdateStamp || lastUpdateStamp.lessThan(context.upateStamp)) {
-                    this._lastUpdatedStamp(name, context.upateStamp);
-                    _updateProperty.call(this, name, value);
+        winjsObservable.updateProperty = function (name: string, value: any, updateStamp?: UpdateStamp) {
+            this._lastUpdatedStamp(name, updateStamp || UpdateStamp.newStamp());
+            _updateProperty.call(this, name, value);
+        }
+
+        var _setProperty: Function = winjsObservable.setProperty;
+        winjsObservable.setProperty = function (name: string, value: any) {
+            
+            var computedProperty : ComputedProperty = this._computedProperty(name);
+            if (computedProperty){
+                if (computedProperty._computedWriter) {
+                    computedProperty._computedWriter(value);
+                    return;
+                }
+                else {
+                    throw new Error("Cannot write a value to a computed observable property unless you specify a 'write' option.");
                 }
             }
-            else {
-                this._lastUpdatedStamp(name, updateStamp || UpdateStamp.newStamp());
-                _updateProperty.call(this, name, value);
-            }
+            return _setProperty.call(this, name, value);
         }
 
         winjsObservable._removeAllDependencies = function (name: string) {
@@ -242,11 +232,9 @@ module WinJS.KO {
                 if (property) {
                     property._removeAllDependencies();
                     property._computedUpdater = null;
-                    if (property._computedWriter) {
-                        this.unbind(name, property._computedWriter);
-                        property._computedUpdater = null;
-                    }
-                }
+                    property._computedWriter = null
+                    delete this._computedProperties[name];
+                }   
             }
             else {
                 if (_dispose) {
@@ -337,8 +325,9 @@ module WinJS.KO {
         _computedWriter: Function;
 
         _removeAllDependencies() {
+            var computedUpdater = this._computedUpdater;
             this._dependencies.forEach(function (d) {
-                d._observable.unbind(d._propertyName,this. _computedUpdater);
+                d._observable.unbind(d._propertyName, computedUpdater);
             });
             this._dependencies = [];
         }   
@@ -356,7 +345,7 @@ module WinJS.KO {
         }
 
         static TYPE_COMPUTED_EVALUATIOR = 0;
-        static TYPE_COMPUTED_DEPENDENCY_INITIAL_BIND = 1;
+        static TYPE_COMPUTED_DEPENDENCY_BIND = 1;
         static TYPE_WRITER_INITIAL_RUN = 2;
         static COMPUTED_WRITER = 3;
 
