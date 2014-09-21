@@ -612,11 +612,8 @@ var WinJS;
 
             var writer = options["write"];
             if (writer && typeof writer == "function") {
-                computedProperty._computedWriter = function () {
-                    var context = new DependencyDetectionContext(DependencyDetectionContext.COMPUTED_WRITER, _computed._lastUpdatedStamp(_propName) || UpdateStamp.newStamp());
-                    DependencyDetection.execute(context, function () {
-                        writer.call(evaluatorFunctionTarget, _computed[_propName]);
-                    });
+                computedProperty._computedWriter = function (value) {
+                    writer.call(evaluatorFunctionTarget, value);
                 };
             }
 
@@ -703,31 +700,22 @@ var WinJS;
             var _updateProperty = winjsObservable.updateProperty;
 
             winjsObservable.updateProperty = function (name, value, updateStamp) {
-                var context = DependencyDetection.currentContext();
-                if (context && context.type == DependencyDetectionContext.COMPUTED_WRITER) {
-                    var lastUpdateStamp = this._lastUpdatedStamp(name);
-                    if (!lastUpdateStamp || lastUpdateStamp.lessThan(context.upateStamp)) {
-                        this._lastUpdatedStamp(name, context.upateStamp);
-                        _updateProperty.call(this, name, value);
-                    }
-                } else {
-                    this._lastUpdatedStamp(name, updateStamp || UpdateStamp.newStamp());
-                    _updateProperty.call(this, name, value);
-                }
+                this._lastUpdatedStamp(name, updateStamp || UpdateStamp.newStamp());
+                _updateProperty.call(this, name, value);
             };
 
             var _setProperty = winjsObservable.setProperty;
             winjsObservable.setProperty = function (name, value) {
-                var ret = _setProperty.call(this, name, value);
                 var computedProperty = this._computedProperty(name);
                 if (computedProperty) {
                     if (computedProperty._computedWriter) {
-                        computedProperty._computedWriter();
+                        computedProperty._computedWriter(value);
+                        return;
                     } else {
                         throw new Error("Cannot write a value to a computed observable property unless you specify a 'write' option.");
                     }
                 }
-                return ret;
+                return _setProperty.call(this, name, value);
             };
 
             winjsObservable._removeAllDependencies = function (name) {
