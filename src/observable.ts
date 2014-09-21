@@ -337,8 +337,9 @@ module WinJS.KO {
         _computedWriter: Function;
 
         _removeAllDependencies() {
+            var computedUpdater = this._computedUpdater;
             this._dependencies.forEach(function (d) {
-                d._observable.unbind(d._propertyName,this. _computedUpdater);
+                d._observable.unbind(d._propertyName, computedUpdater);
             });
             this._dependencies = [];
         }   
