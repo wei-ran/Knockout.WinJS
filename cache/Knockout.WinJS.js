@@ -21,8 +21,8 @@
             var data = source;
             if (destProps.length > 0 && _dataContextMemebrs[sourceProps[0]]) {
                 var dataContext = DataContext.getDataContextFromElement(dest);
-                if (dataContext && dataContext.bindable)
-                    data = dataContext.bindable();
+                if (dataContext)
+                    data = dataContext;
             }
 
             if (destProps || destProps.length == 1) {
@@ -443,7 +443,7 @@
             };
 
             DataContext.isObservableDataContext = function (source) {
-                return source && source.bindable && WinJS.Binding.unwrap(source.bindable()) instanceof DataContext;
+                return source && WinJS.Binding.unwrap(source) instanceof DataContext;
             };
 
             DataContext.getDataContextFromElement = function (element) {
@@ -523,7 +523,7 @@ var WinJS;
 
             if (_data) {
                 var _observable = WinJS.Binding.as(_data);
-                CreateObservable(_observable);
+                createObservable(_observable);
                 return _observable;
             }
 
@@ -572,7 +572,7 @@ var WinJS;
 
             var computedUpdater = function () {
                 var context = DependencyDetection.currentContext();
-                if (context && context.type == DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_INITIAL_BIND) {
+                if (context && context.type == DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_BIND) {
                     return;
                 }
 
@@ -584,7 +584,7 @@ var WinJS;
                 });
 
                 var dependencies = (computedProperty._dependencies || []);
-                DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_INITIAL_BIND), function () {
+                DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_BIND), function () {
                     dependencies.forEach(function (d) {
                         d._observable.bind(d._propertyName, computedUpdater);
                     });
@@ -613,22 +613,11 @@ var WinJS;
             var writer = options["write"];
             if (writer && typeof writer == "function") {
                 computedProperty._computedWriter = function () {
-                    var context = DependencyDetection.currentContext();
-                    if (!context || context.type != DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN) {
-                        context = new DependencyDetectionContext(DependencyDetectionContext.COMPUTED_WRITER, _computed._lastUpdatedStamp(_propName) || UpdateStamp.newStamp());
-                        DependencyDetection.execute(context, function () {
-                            writer.call(evaluatorFunctionTarget, _computed[_propName]);
-                        });
-                    }
-                };
-
-                if (_computed.bind) {
-                    DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN), function () {
-                        _computed.bind(_propName, computedProperty._computedWriter);
+                    var context = new DependencyDetectionContext(DependencyDetectionContext.COMPUTED_WRITER, _computed._lastUpdatedStamp(_propName) || UpdateStamp.newStamp());
+                    DependencyDetection.execute(context, function () {
+                        writer.call(evaluatorFunctionTarget, _computed[_propName]);
                     });
-                } else {
-                    throw new Error("A non-observable destionation does not support writer.");
-                }
+                };
             }
 
             computedProperty._computedUpdater = computedUpdater;
@@ -698,7 +687,7 @@ var WinJS;
         }
         KO.getRawArray = getRawArray;
 
-        function CreateObservable(winjsObservable) {
+        function createObservable(winjsObservable) {
             winjsObservable.addComputedProperty = function (name, evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, destObj, destProp) {
                 this.addProperty(name);
                 KO.computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
@@ -727,6 +716,20 @@ var WinJS;
                 }
             };
 
+            var _setProperty = winjsObservable.setProperty;
+            winjsObservable.setProperty = function (name, value) {
+                var ret = _setProperty.call(this, name, value);
+                var computedProperty = this._computedProperty(name);
+                if (computedProperty) {
+                    if (computedProperty._computedWriter) {
+                        computedProperty._computedWriter();
+                    } else {
+                        throw new Error("Cannot write a value to a computed observable property unless you specify a 'write' option.");
+                    }
+                }
+                return ret;
+            };
+
             winjsObservable._removeAllDependencies = function (name) {
                 var property = this._computedProperty(name);
                 if (property) {
@@ -746,10 +749,8 @@ var WinJS;
                     if (property) {
                         property._removeAllDependencies();
                         property._computedUpdater = null;
-                        if (property._computedWriter) {
-                            this.unbind(name, property._computedWriter);
-                            property._computedUpdater = null;
-                        }
+                        property._computedWriter = null;
+                        delete this._computedProperties[name];
                     }
                 } else {
                     if (_dispose) {
@@ -848,7 +849,7 @@ var WinJS;
                 }
             }
             DependencyDetectionContext.TYPE_COMPUTED_EVALUATIOR = 0;
-            DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_INITIAL_BIND = 1;
+            DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_BIND = 1;
             DependencyDetectionContext.TYPE_WRITER_INITIAL_RUN = 2;
             DependencyDetectionContext.COMPUTED_WRITER = 3;
             return DependencyDetectionContext;
