@@ -224,25 +224,32 @@ module WinJS.Knockout.UnitTests {
 
     function computedWriter2(complete) {
         var o = wko.observable({ t1: 1, t2: 0, t3: 1 });
-        o.computed("t2", function() {
+        o.computed("t2", function () {
             return this.t1 + 1;
+        });
+        o.computed("t3", function() {
+            return this.t2 + 2;
         }, null,
         {
             write: function(value) {
-                this.t3 = value + 2;
+                this.t1 = value + 2;
             }
         });
 
         _scheduleNTimes(0, 10).then(() => {
+            assert.equal(o.t1, 1);
             assert.equal(o.t2, 2);
+            assert.equal(o.t3, 4);
             o.t1 = 3;
             _scheduleNTimes(0, 10).then(() => {
+                assert.equal(o.t1, 3);
                 assert.equal(o.t2, 4);
-                assert.equal(o.t3, 1);
-                o.t2 = 2;
+                assert.equal(o.t3, 6);
+                o.t3 = 2;
                 _scheduleNTimes(0, 10).then(() => {
-                    assert.equal(o.t2, 2);
-                    assert.equal(o.t3, 4);
+                    assert.equal(o.t1, 4);
+                    assert.equal(o.t2, 5);
+                    assert.equal(o.t3, 7);
                     complete();
                 });
             });
@@ -286,7 +293,7 @@ module WinJS.Knockout.UnitTests {
                     assert.equal(o1.t1, 8);
                     assert.equal(o1.t2, 11);
                     assert.equal(o2.t3, 3);
-                    assert.equal(o2.t4, 5);
+                    assert.equal(o2.t4, 13);
                     complete();
                 });
             });
@@ -324,7 +331,7 @@ module WinJS.Knockout.UnitTests {
                 _scheduleNTimes(0, 100).then(function () {
                     assert.equal(o.t1, 7);
                     assert.equal(o.t2, 8);
-                    assert.equal(o.t3, 4);
+                    assert.equal(o.t3, 16);
                     complete();
                 });
             });
@@ -373,7 +380,7 @@ module WinJS.Knockout.UnitTests {
             o.t2 = 2;
             _scheduleNTimes(0, 20).then(() => {
                 assert.equal(o.t1, 4);
-                assert.equal(o.t2, 2);
+                assert.equal(o.t2, 8);
                 assert.equal(o.t3, 3);
                 o.dispose("t2");
                 o.t2 = 3;
