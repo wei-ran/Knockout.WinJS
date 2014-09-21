@@ -200,12 +200,12 @@ module WinJS.Knockout.UnitTests {
     function computedWriter(complete) {
         var o = wko.observable({ t1: 1, t2: 0, t3: 1 });
         o.computed("t3", {
-            read: () => {
+            read: function(){
                 return 2;
             },
-            write: () => {
-                o.t1 = o.t3 * 2;
-                o.t2 = o.t3 + 1;
+            write: function(value) {
+                this.t1 = value * 2;
+                this.t2 = value + 1;
             }
         });
 
@@ -226,12 +226,12 @@ module WinJS.Knockout.UnitTests {
 
     function computedWriter2(complete) {
         var o = wko.observable({ t1: 1, t2: 0, t3: 1 });
-        o.computed("t2", () => {
-            return o.t1 + 1;
+        o.computed("t2", function() {
+            return this.t1 + 1;
         }, null,
         {
-            write: () => {
-                o.t3 = o.t2 + 2;
+            write: function(value) {
+                this.t3 = value + 2;
             }
         });
 
@@ -286,10 +286,10 @@ module WinJS.Knockout.UnitTests {
         var o = wko.observable({ t1: 1, t2:0 });
         o.computed("t2", {
             read: function () {
-                return o.t1 * 2;
+                return this.t1 * 2;
             },
-            write: function () {
-                o.t1 = o.t2 * 2;
+            write: function (value) {
+                this.t1 = value * 2;
             }
         });
 
@@ -385,11 +385,45 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
+    function dynamicDependecyTracking(complete) {
+        var o = wko.observable({ t1: { t2: 1 }, t3: 0 });
+        o.computed("t3", function () {
+            return o.t1.t2 * 2;
+        });
+        assert.equal(o.t3, 2);
+        o.t1.t2 = 2; //should not update t3
+        _scheduleNTimes(0, 10).then(() => {
+            assert.equal(o.t3, 2);
+            o.t1 = wko.observable({ t2: 3 });
+            o.t1.t2 = 4; //shoud update t3 now
+            _scheduleNTimes(0, 10).then(() => {
+                assert.equal(o.t3, 8);
+                complete();
+            });
+        });
+    }
+
+    function getDependenciesCount(complete) {
+        var o = wko.observable({ t1: { t2: 1 }, t3: 0 });
+        o.computed("t3", function () {
+            return o.t1.t2 * 2;
+        });
+        assert.equal(o.getDependenciesCount("t1"), 0);
+        assert.equal(o.getDependenciesCount("t3"), 1);
+        o.t1 = wko.observable({ t2: 3 });
+        _scheduleNTimes(0, 10).then(() => {
+            assert.equal(o.getDependenciesCount("t3"), 2);
+            o.dispose("t3");
+            assert.equal(o.getDependenciesCount("t3"), 0);
+            complete();
+        });
+    }
+
     function basicObservableArray(complete) {
         var a = wko.observableArray([1, 2, 3]);
         var b = wko.computed(() => {
             var sum = 0;
-            a.array().forEach(function (v) {
+            a.array.forEach(function (v) {
                 sum += v;
             });
             return sum;
@@ -410,10 +444,10 @@ module WinJS.Knockout.UnitTests {
         var b = wko.observable({ t1: 0, t2: 1 });
         b.computed("t1", () => {
             var sum = 0;
-            a.array().forEach(function (v) {
+            a.array.forEach(function (v) {
                 sum += v;
             });
-            return sum / a.array().length + b.t2 + b.t2;
+            return sum / a.array.length + b.t2 + b.t2;
         });
 
         assert.equal(b.t1, 4);
@@ -429,6 +463,37 @@ module WinJS.Knockout.UnitTests {
             assert.equal((<any>a)._listeners["_array"], undefined);
             assert.equal((<any>b)._listeners["t2"], undefined);
             compelete();
+        });
+    }
+
+    function observableArrayDynamicDependencyTracking(complete) {
+        var items = wko.observableArray();
+        var calc = WinJS.KO.observable({ sumA: 0 });
+        calc.computed("sumA", function () {
+            var sum = 0;
+            items.array.forEach(function (v) {
+                if (v) {
+                    sum += v.A;
+                }
+            });
+            return sum;
+        });
+        var item1 = { A: 1 };
+        var item2 = WinJS.KO.observable({ A: 2 });
+        items.push(item1); 
+        items.push(item2);
+        _scheduleNTimes(0, 50).then(() => {
+            assert.equal(calc.sumA, 3);
+
+            item1.A = 3; //it should NOT update calc.sumA
+            _scheduleNTimes(0, 50).then(() => {
+                assert.equal(calc.sumA, 3);
+                item2.A = 4; //it should NOT update calc.sumA
+                _scheduleNTimes(0, 50).then(() => {
+                    assert.equal(calc.sumA, 7);
+                    complete();
+                });
+            }); 
         });
     }
 
@@ -470,8 +535,11 @@ module WinJS.Knockout.UnitTests {
         "Dispose Computed Property": disposeComputedProperty,
         "Dispose Computed Writer": disposeComputedWriter,
         "Auto Dispose When Recomputed": autoDisposeWhenRecomputed,
+        "Dynamic Dependency Tracking": dynamicDependecyTracking,
+        "Get Dependencies Count" : getDependenciesCount,
         "Basic Observable Array": basicObservableArray,
-        "Dispose with Observable Array" : disposeWithObservableArray,
+        "Dispose with Observable Array": disposeWithObservableArray,
+        "Observable Array Dynamic Dependency Tracking": observableArrayDynamicDependencyTracking,
     };
 
     (function Run() {
