@@ -62,12 +62,24 @@ module WinJS.KO {
 
         var computedUpdater = function () {
             var context = DependencyDetection.currentContext();
-            if (context && context.type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) {
+            if (context && context.type == DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_INITIAL_BIND) {
                 return; //triggered by the bind methods in intial evaluation. do nothing
             }
 
-            var value = evaluator();
+            computedProperty._removeAllDependencies();
+
+            var value;
+            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_EVALUATIOR, new ObservableProperty(_computed, _propName)), function() {
+                value = evaluator(); 
+            });
+
             var dependencies = <ObservableProperty[]>(computedProperty._dependencies || []);
+            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_INITIAL_BIND), function() {
+                dependencies.forEach(function (d) {
+                    d._observable.bind(d._propertyName, computedUpdater);
+                });
+            });
+
             var updateStamp = new UpdateStamp(new Date(0));
             dependencies.forEach(function (d) {
                 var lastUpdateStamp = d._observable._lastUpdatedStamp(d._propertyName);
@@ -84,6 +96,8 @@ module WinJS.KO {
             } else {
                 _computed[_propName] = value;
             }
+
+            return value;
         }
 
         var writer = options["write"];
@@ -107,18 +121,14 @@ module WinJS.KO {
                 throw new Error("A non-observable destionation does not support writer.");
             }
         }
-
+      
         computedProperty._computedUpdater = computedUpdater;
 
-        DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_INITIAL_EVALUATION, new ObservableProperty(_computed, _propName)), () => {
-            _initVal = evaluator();
-            if (_computed.setProperty) {
-                _computed.setProperty(_propName, _initVal);
-            }
-            else {
-                _computed[_propName] = _initVal;
-            }
-        });
+        if (typeof _computed._lastUpdatedStamp == "function") {
+            _computed._lastUpdatedStamp(_propName, null);
+        }
+
+        var initValue = computedUpdater();
 
         if (_computed == destObj) {
             return _initVal;
@@ -128,7 +138,8 @@ module WinJS.KO {
         }
     }
 
-    export function observableArray(list) : IObservableArray<any> {
+    export function observableArray(list?) : IObservableArray<any> {
+        var list = list || [];
         var winJSList = <any>new WinJS.Binding.List(list);
         var lastUpdatedStamp: UpdateStamp;
 
@@ -212,20 +223,25 @@ module WinJS.KO {
             }
         }
 
+        winjsObservable._removeAllDependencies = function (name: string) {
+            var property = this._computedProperty(name);
+            if (property) {
+                var dependencies: ObservableProperty[] = property._dependencies || [];
+                dependencies.forEach(function (d) {
+                    d._observable.unbind(d._propertyName, property._computedUpdater);
+                });
+                property._dependencies = [];
+            }
+        }
+
         var _dispose : Function = winjsObservable.dispose;
         winjsObservable.dispose = function (name?: string) {
             if (arguments.length > 0) {
+                
                 var property = this._computedProperty(name);
                 if (property) {
-                    if (property._computedUpdater) {
-                        var dependencies: ObservableProperty[] = property._dependencies || [];
-                        dependencies.forEach(function (d) {
-                            d._observable.unbind(d._propertyName, property._computedUpdater);
-                        });
-                        property._computedUpdater = null;
-                        property._dependencies = [];
-                    }
-
+                    property._removeAllDependencies();
+                    property._computedUpdater = null;
                     if (property._computedWriter) {
                         this.unbind(name, property._computedWriter);
                         property._computedUpdater = null;
@@ -266,44 +282,18 @@ module WinJS.KO {
 
         winjsObservable.computed = function (name: string, evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?) {
                 computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
-            }
+        }
 
-        //private _addProperty(name){
-
-        //    var prop: ComputedProperty = <any>((value?: any) => {
-        //        if (arguments.length == 0) {
-        //            return this.getProperty(name);
-        //        }
-        //        else {
-        //            return this.setProperty(name, value);
-        //        }
-        //    });
-
-        //    this[name] = prop;
-
-        //    var _peek = ()=> {
-        //        return this._winjsObservable.getProperty(name);
-        //    }
-
-        //    var _computed = (evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?) => {
-        //        computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
-        //    }
-
-        //    var _dispose = ()=> {
-        //        this.dispose(name);
-        //    }
-
-        //    prop.peek = _peek;
-        //    prop.computed = _computed
-        //    prop.dispose = _dispose;
-        //    return prop;
-        //}
+        winjsObservable.getDependenciesCount = function (name: string) {
+            var computedProperty : ComputedProperty = this._computedProperty(name);
+            return computedProperty && computedProperty._dependencies ? computedProperty._dependencies.length : 0;
+        }
     }
 
     function _bindComputedUpdaterIfNeccessary(observable: IObservable, name : string) {
         var context = DependencyDetection.currentContext();
         if (context) {
-            if (context.type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) { //initial computed evaluator
+            if (context.type == DependencyDetectionContext.TYPE_COMPUTED_EVALUATIOR) { //initial computed evaluator
                 var observableProperty = context.observableProperty;
 
                 if (!observableProperty || (observableProperty._observable === observable && observableProperty._propertyName == name)) {
@@ -321,10 +311,6 @@ module WinJS.KO {
                     dependencies.push(property);
                 };
                 computed._dependencies = dependencies;
-
-                DependencyDetection.execute(null, function () {
-                    observable.bind(name, computed._computedUpdater);
-                });
             }
         }
     }
@@ -346,18 +332,22 @@ module WinJS.KO {
     }
 
     class ComputedProperty {
-        _dependencies: ObservableProperty[];
+        _dependencies: ObservableProperty[] = [];
         _computedUpdater: Function;
         _computedWriter: Function;
-        //peek: Function;
-        //computed: Function;
-        //dispose: Function;    
+
+        _removeAllDependencies() {
+            this._dependencies.forEach(function (d) {
+                d._observable.unbind(d._propertyName,this. _computedUpdater);
+            });
+            this._dependencies = [];
+        }   
     }
 
     class DependencyDetectionContext {
         constructor(type: number, observablePropertyOrUpdateStamp?) {
             this.type = type;
-            if (type == DependencyDetectionContext.TYPE_INITIAL_EVALUATION) {
+            if (type == DependencyDetectionContext.TYPE_COMPUTED_EVALUATIOR) {
                 this.observableProperty = observablePropertyOrUpdateStamp;
             }
             else {
@@ -365,8 +355,8 @@ module WinJS.KO {
             }
         }
 
-        static TYPE_INITIAL_EVALUATION = 0;
-        static TYPE_COMPUTED_UPDATER = 1;
+        static TYPE_COMPUTED_EVALUATIOR = 0;
+        static TYPE_COMPUTED_DEPENDENCY_INITIAL_BIND = 1;
         static TYPE_WRITER_INITIAL_RUN = 2;
         static COMPUTED_WRITER = 3;
 
