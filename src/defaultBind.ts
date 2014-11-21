@@ -108,7 +108,7 @@ module WinJS.KO {
         var cancelable = WinJS.Binding.defaultBind(source, sourceProps, data, ["onclick"]);
         dest.onclick = function () {
             if (DataContext.isObservableDataContext(data.context)) {
-                data.onclick.call(data.context.$data);
+                data.onclick.call(WinJS.Binding.unwrap(data.context.$data));
             }
             else {
                 data.onclick.call(data.context);
