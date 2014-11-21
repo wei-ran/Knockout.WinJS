@@ -33,7 +33,7 @@
                 }
             }
 
-            return WinJS.Binding.defaultBind(source, sourceProps, dest, destProps);
+            return WinJS.Binding.defaultBind(data, sourceProps, dest, destProps);
         });
 
         function visibleBind(source, sourceProps, dest) {
@@ -62,6 +62,7 @@
             if (flowControl) {
                 flowControl.type = type;
                 flowControl.source = source;
+                flowControl._parentContext = source;
                 return WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
             } else {
                 return {
@@ -88,7 +89,26 @@
         }
 
         function clickBind(source, sourceProps, dest) {
-            return WinJS.Binding.defaultBind(source, sourceProps, dest, ["onclick"]);
+            var data = {
+                onclick: function (obj) {
+                },
+                context: source
+            };
+            var cancelable = WinJS.Binding.defaultBind(source, sourceProps, data, ["onclick"]);
+            dest.onclick = function () {
+                if (DataContext.isObservableDataContext(data.context)) {
+                    data.onclick.call(WinJS.Binding.unwrap(data.context.$data));
+                } else {
+                    data.onclick.call(data.context);
+                }
+            };
+
+            return {
+                cancel: function () {
+                    cancelable.cancel();
+                    dest.onclick = undefined;
+                }
+            };
         }
 
         function eventBind(source, sourceProps, dest) {
@@ -258,7 +278,7 @@
                 this._type = options["type"];
                 this._source = options["source"];
                 this.element = element;
-                this._parentContext = DataContext.getDataContextFromElement(this.element);
+
                 element.winControl = this;
                 this.reload();
             }
@@ -302,7 +322,7 @@
                             createChildElement(this._data, true, this._parentContext);
                             break;
                         case "foreach":
-                            var dataContex = DataContext.createObservableDataContext(this._data, this._parentContext);
+                            var dataContex = this._parentContext;
 
                             var foreachUpdater = function (list) {
                                 if (!(list instanceof Array || list instanceof WinJS.Binding.List)) {
@@ -460,7 +480,6 @@
                 dataContext.data(data);
                 if (parent) {
                     dataContext.$parentContexts = [parent];
-                    dataContext.$parentContexts.concat(parent.$parentContexts);
                     dataContext.$parentContext = parent;
                 } else {
                     dataContext.$parentContexts = [];
@@ -468,7 +487,8 @@
 
                 var dataContextObservable = KO.observable(dataContext);
 
-                if (parent) {
+                if (DataContext.isObservableDataContext(parent)) {
+                    dataContext.$parentContexts.concat(parent.$parentContexts);
                     dataContextObservable.addComputedProperty("$parents", function () {
                         return dataContextObservable.peek("$parentContexts").map(function (p) {
                             return p.$data;
@@ -486,7 +506,9 @@
                         }
                     });
                 } else {
-                    dataContext.$parents = [];
+                    dataContextObservable.$parents = [parent];
+                    dataContextObservable.$parent = parent;
+                    dataContextObservable.$root = parent;
                 }
 
                 return dataContextObservable;
