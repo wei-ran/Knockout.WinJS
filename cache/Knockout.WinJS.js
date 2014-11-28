@@ -278,7 +278,6 @@
                 this._type = options["type"];
                 this._source = options["source"];
                 this.element = element;
-
                 element.winControl = this;
                 this.reload();
             }
@@ -296,6 +295,14 @@
                     if (data) {
                         _this._template.render(data, div);
                     }
+
+                    if (div.childElementCount == 1) {
+                        var element = div.firstElementChild;
+                        div.removeChild(div.firstElementChild);
+                        element["_winjs_ko_dataContext"] = context;
+                        return element;
+                    }
+
                     return div;
                 };
 
