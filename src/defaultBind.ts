@@ -295,7 +295,6 @@ module WinJS.KO {
             this._type = options["type"];
             this._source = options["source"];
             this.element = element;
-            //this._parentContext = DataContext.getDataContextFromElement(this.element);
             element.winControl = this;
             this.reload();
         }
@@ -313,7 +312,7 @@ module WinJS.KO {
         _parentContext: any;
 
         reload() {
-            var createElementWithDataContext = (data, newContext: boolean, parentContext?, index?: number): HTMLElement => {
+            var createElementWithDataContext = (data, newContext: boolean, parentContext?, index?: number): Element => {
                 var div = document.createElement("div");
                 if (newContext) {
                     var context = DataContext.createObservableDataContext(data, parentContext);
@@ -325,6 +324,14 @@ module WinJS.KO {
                 if (data) {
                     this._template.render(data, div);
                 }
+
+                if (div.childElementCount == 1) {
+                    var element = div.firstElementChild;
+                    div.removeChild(div.firstElementChild);
+                    element["_winjs_ko_dataContext"] = context;
+                    return element;
+                }
+
                 return div;
             }
 

@@ -6,7 +6,7 @@
     "bundle": "typings/tsd.d.ts",
     "installed": {
         "winjs/winjs.d.ts": {
-            "commit": "d1ab55e6a26a2ad4a3b8732084a9575354aacb7b"
+            "commit": "974747ee99bbd087bac5e5647405101139519963"
         }
     }
 }
