@@ -73,6 +73,10 @@ module WinJS.KO {
         if (flowControl) {
             flowControl.type = type;
             flowControl.source = source;
+<<<<<<< HEAD
+=======
+            flowControl._parentContext = source;
+>>>>>>> parent of 6a7f411... fix issues in flow control binidings
             return WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
         }
         else {
