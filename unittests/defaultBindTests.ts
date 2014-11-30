@@ -195,10 +195,13 @@ module WinJS.Knockout.UnitTests {
     }
 
     function clickBind(complete) {
+        var clickme1Called = false;
+        var clickme2Called = false;
         function _clickme1() {
-            
+            clickme1Called = true;
         }
         function _clickme2() {
+            clickme2Called = true;
         }
         WinJS.Utilities.markSupportedForProcessing(_clickme1);
         WinJS.Utilities.markSupportedForProcessing(_clickme2);
@@ -207,16 +210,14 @@ module WinJS.Knockout.UnitTests {
         document.body.appendChild(button);
         button.setAttribute(WinJSBindingAttribute, "click : value WinJS.KO.defaultBind");
         wb.processAll(button, o).then(() => {
-            assert.equal(button.onclick, _clickme1);
+            button.click();
+            assert.ok(clickme1Called);
             o.value = _clickme2;
             _scheduleNTimes(0, 10).then(() => {
-                assert.equal(button.onclick, _clickme2);
-                o.value = null;
-                _scheduleNTimes(0, 10).then(() => {
-                    assert.equal(button.onclick, null);
-                    document.body.removeChild(button);
-                    complete();
-                });
+                button.click();
+                assert.ok(clickme2Called);
+                document.body.removeChild(button);
+                complete();
             });
         });
     }
