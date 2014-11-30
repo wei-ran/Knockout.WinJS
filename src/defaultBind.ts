@@ -74,7 +74,7 @@ module WinJS.KO {
             flowControl.type = type;
             flowControl.source = source;
             flowControl._parentContext = source;
-            return WinJS.Binding.defaultBind(source, sourceProps, flowControl, ["data"]);
+            return WinJS.Binding.defaultBind(source, sourceProps, dest, ["winControl", "data"]);
         }
         else {
             return {
