@@ -62,7 +62,6 @@
             if (flowControl) {
                 flowControl.type = type;
                 flowControl.source = source;
-                flowControl._parentContext = source;
                 return WinJS.Binding.defaultBind(source, sourceProps, dest, ["winControl", "data"]);
             } else {
                 return {
@@ -326,10 +325,10 @@
                             }
                             break;
                         case "with":
-                            createChildElement(this._data, true, this._parentContext);
+                            createChildElement(this._data, true, this._source);
                             break;
                         case "foreach":
-                            var dataContex = this._parentContext;
+                            var dataContex = this._source;
 
                             var foreachUpdater = function (list) {
                                 if (!(list instanceof Array || list instanceof WinJS.Binding.List)) {
