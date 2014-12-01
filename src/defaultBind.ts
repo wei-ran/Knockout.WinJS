@@ -73,7 +73,6 @@ module WinJS.KO {
         if (flowControl) {
             flowControl.type = type;
             flowControl.source = source;
-            flowControl._parentContext = source;
             return WinJS.Binding.defaultBind(source, sourceProps, dest, ["winControl", "data"]);
         }
         else {
@@ -309,7 +308,6 @@ module WinJS.KO {
         _data: any;
         _template: WinJS.Binding.Template;
         _type: string;
-        _parentContext: any;
 
         reload() {
             var createElementWithDataContext = (data, newContext: boolean, parentContext?, index?: number): Element => {
@@ -355,10 +353,10 @@ module WinJS.KO {
                         }
                         break;
                     case "with":
-                        createChildElement(this._data, true, this._parentContext);
+                        createChildElement(this._data, true, this._source);
                         break;
                     case "foreach":
-                        var dataContex = this._parentContext;//DataContext.createObservableDataContext(this._data, this._parentContext);
+                        var dataContex = this._source;
 
                         var foreachUpdater = (list) => {
                             if (!(list instanceof Array || list instanceof WinJS.Binding.List)) {
