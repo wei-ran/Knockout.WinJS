@@ -128,7 +128,7 @@ module WinJS.KO {
 
         function _eventHandler(evt: UIEvent) {
             var handler: Function = dest["_winjs_ko_eventBind"][evt.type]
-            if (true === handler.apply(data, [data, evt])) {
+            if (true !== handler.apply(data, [data, evt])) {
                 evt.preventDefault();
             }
         }

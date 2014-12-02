@@ -266,11 +266,9 @@ module WinJS.Knockout.UnitTests {
         var submit2Called = false;
         function _submit1() {
             submit1Called = true;
-            return true;
         }
         function _submit2() {
             submit2Called = true;
-            return true;
         }
         WinJS.Utilities.markSupportedForProcessing(_submit1);
         WinJS.Utilities.markSupportedForProcessing(_submit2);
