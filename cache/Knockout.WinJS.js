@@ -91,35 +91,39 @@
         function _eventBind(source, sourceProps, dest, getEvents) {
             var data = DataContext.isObservableDataContext(source) ? WinJS.Binding.unwrap(source.$data) : source;
 
-            function _removeEvents() {
-                var handlers = dest["_winjs_ko_eventBind"] || {};
+            function _foreachEvent(events, func) {
+                events = events || {};
+                for (var key in events) {
+                    var event = events[key];
+                    if (typeof event == "function") {
+                        func(key);
+                    }
+                }
+            }
 
-                for (var key in handlers) {
-                    dest.removeEventListener(key, handlers[key]);
+            function _removeEvents() {
+                _foreachEvent(dest["_winjs_ko_eventBind"], function (key) {
+                    dest.removeEventListener(key, _eventHandler);
+                });
+            }
+
+            function _eventHandler(evt) {
+                var handler = dest["_winjs_ko_eventBind"][evt.type];
+                if (true === handler.apply(data, [data, evt])) {
+                    evt.preventDefault();
                 }
             }
 
             var converter = WinJS.Binding.converter(function (sourceData) {
-                var handlers = {};
                 var events = getEvents(sourceData) || {};
-                for (var key in events) {
-                    var event = events[key];
-                    if (typeof event == "function") {
-                        handlers[key] = function (evt) {
-                            if (true === event.apply(data, [data, evt])) {
-                                evt.preventDefault();
-                            }
-                        };
-                    }
-                }
 
                 _removeEvents();
 
-                for (var key in handlers) {
-                    dest.addEventListener(key, handlers[key]);
-                }
+                _foreachEvent(events, function (key) {
+                    dest.addEventListener(key, _eventHandler);
+                });
 
-                return handlers;
+                return events;
             });
 
             var converterCancelable = converter(source, sourceProps, dest, ["_winjs_ko_eventBind"]);
