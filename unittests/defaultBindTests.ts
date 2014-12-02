@@ -38,7 +38,7 @@ module WinJS.Knockout.UnitTests {
 
         var div = document.createElement("div");
         document.body.appendChild(div);
-        div.setAttribute(WinJSBindingAttribute, "visible : value WinJS.KO.defaultBind");
+        div.setAttribute(WinJSBindingAttribute, "$visible : value WinJS.KO.defaultBind");
         wb.processAll(div, o).then(() => {
             assert.equal(div.style.display, "none");
             
@@ -58,8 +58,8 @@ module WinJS.Knockout.UnitTests {
         var em = document.createElement("div");
         document.body.appendChild(span);
         document.body.appendChild(em);
-        span.setAttribute(WinJSBindingAttribute, "text : t1 WinJS.KO.defaultBind");
-        em.setAttribute(WinJSBindingAttribute, "text : t2 WinJS.KO.defaultBind");
+        span.setAttribute(WinJSBindingAttribute, "$text : t1 WinJS.KO.defaultBind");
+        em.setAttribute(WinJSBindingAttribute, "$text : t2 WinJS.KO.defaultBind");
         wb.processAll(document.body, o).then(() => {
             assert.equal(span.textContent, "<div>hello</div>");
             assert.equal(em.textContent, "hello");
@@ -80,7 +80,7 @@ module WinJS.Knockout.UnitTests {
         var o = wko.observable("test1");
         var div = document.createElement("div");
         document.body.appendChild(div);
-        div.setAttribute(WinJSBindingAttribute, "html : value WinJS.KO.defaultBind");
+        div.setAttribute(WinJSBindingAttribute, "$html : value WinJS.KO.defaultBind");
         wb.processAll(div, o).then(() => {
             assert.equal(div.innerHTML, "test1");
             o.value = "<div>test</div>";
@@ -208,15 +208,54 @@ module WinJS.Knockout.UnitTests {
         var o = wko.observable(_clickme1);
         var button = document.createElement("button");
         document.body.appendChild(button);
-        button.setAttribute(WinJSBindingAttribute, "click : value WinJS.KO.defaultBind");
+        button.setAttribute(WinJSBindingAttribute, "$click : value WinJS.KO.defaultBind");
         wb.processAll(button, o).then(() => {
             button.click();
             assert.ok(clickme1Called);
+            assert.ok(!clickme2Called);
+            clickme1Called = false;
             o.value = _clickme2;
             _scheduleNTimes(0, 10).then(() => {
                 button.click();
                 assert.ok(clickme2Called);
+                assert.ok(!clickme1Called);
                 document.body.removeChild(button);
+                complete();
+            });
+        });
+    }
+
+    function eventBind(complete) {
+        var clickmeCalled = false;
+        var focusmeCalled = false;
+        function _clickme() {
+            clickmeCalled = true;
+        }
+        function _focusme() {
+            focusmeCalled = true;
+            return true;
+        }
+        WinJS.Utilities.markSupportedForProcessing(_clickme);
+        WinJS.Utilities.markSupportedForProcessing(_focusme);
+        var o = wko.observable({ events: { click: _clickme } });
+        var link = document.createElement("a");
+        document.body.appendChild(link);
+        link.setAttribute(WinJSBindingAttribute, "$event : events WinJS.KO.defaultBind");
+        wb.processAll(link, o).then(() => {
+            link.click();
+            assert.ok(clickmeCalled);
+            assert.ok(!focusmeCalled);
+            clickmeCalled = false;
+            o.events = { focus: _focusme};
+            _scheduleNTimes(0, 10).then(() => {
+                //link.focus();
+                link.click();
+                var evt = document.createEvent("UIEvent");
+                evt.initEvent("focus", true, true);
+                link.dispatchEvent(evt);
+                assert.ok(focusmeCalled);
+                assert.ok(!clickmeCalled);
+                document.body.removeChild(link);
                 complete();
             });
         });
@@ -227,9 +266,11 @@ module WinJS.Knockout.UnitTests {
         var submit2Called = false;
         function _submit1() {
             submit1Called = true;
+            return true;
         }
         function _submit2() {
             submit2Called = true;
+            return true;
         }
         WinJS.Utilities.markSupportedForProcessing(_submit1);
         WinJS.Utilities.markSupportedForProcessing(_submit2);
@@ -240,15 +281,18 @@ module WinJS.Knockout.UnitTests {
         submit.setAttribute("type", "submit");
         form.appendChild(submit);
        
-        form.setAttribute(WinJSBindingAttribute, "submit : value WinJS.KO.defaultBind");
+        form.setAttribute(WinJSBindingAttribute, "$submit : value WinJS.KO.defaultBind");
         wb.processAll(form, o).then(() => {
             submit.click();
             _scheduleNTimes(0, 10).then(() => {
+                assert.ok(submit1Called);
+                assert.ok(!submit2Called);
+                submit1Called = false;
                 o.value = _submit2;
                 _scheduleNTimes(0, 10).then(() => {
                     submit.click();
                     _scheduleNTimes(0, 10).then(() => {
-                        assert.ok(submit1Called);
+                        assert.ok(!submit1Called);
                         assert.ok(submit2Called);
                         document.body.removeChild(form);
                         complete();
@@ -265,7 +309,7 @@ module WinJS.Knockout.UnitTests {
         var input = document.createElement("input");
         input.focus();
         document.body.appendChild(input);
-        input.setAttribute(WinJSBindingAttribute, "hasFocus : value WinJS.KO.defaultBind");
+        input.setAttribute(WinJSBindingAttribute, "$hasFocus : value WinJS.KO.defaultBind");
         wb.processAll(input, o).then(() => {
             assert.equal(document.activeElement, input);
             _scheduleNTimes(0, 10).then(() => {
@@ -293,7 +337,7 @@ module WinJS.Knockout.UnitTests {
         var o = wko.observable(false);
         var input = document.createElement("input");
         document.body.appendChild(input);
-        input.setAttribute(WinJSBindingAttribute, "enable : value WinJS.KO.defaultBind");
+        input.setAttribute(WinJSBindingAttribute, "$enable : value WinJS.KO.defaultBind");
         wb.processAll(input, o).then(() => {
             assert.ok(input.disabled);
             o.value = true;
@@ -310,7 +354,7 @@ module WinJS.Knockout.UnitTests {
         var input = document.createElement("input");
         input.type = "text";
         document.body.appendChild(input);
-        input.setAttribute(WinJSBindingAttribute, "value : value WinJS.KO.defaultBind");
+        input.setAttribute(WinJSBindingAttribute, "$value : value WinJS.KO.defaultBind");
         wb.processAll(input, o).then(() => {
             assert.equal(input.value, "test1");
             o.value = "test2";
@@ -336,7 +380,7 @@ module WinJS.Knockout.UnitTests {
         var input = document.createElement("input");
         input.type = "checkbox";
         document.body.appendChild(input);
-        input.setAttribute(WinJSBindingAttribute, "checked : value WinJS.KO.defaultBind");
+        input.setAttribute(WinJSBindingAttribute, "$checked : value WinJS.KO.defaultBind");
         wb.processAll(input, o).then(() => {
             assert.ok(input.checked);
             o.value = false;
@@ -384,6 +428,7 @@ module WinJS.Knockout.UnitTests {
         "If Not Bind": ifNotBind,
         "With Bind": withBind,
         "Foreach Bind": foreachBind,
+        "Event Bind": eventBind,
         "Click Bind": clickBind,
         "Submit Bind": submitBind,
         "Enable Bind": enableBind,
