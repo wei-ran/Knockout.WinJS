@@ -23,6 +23,7 @@ module WinJS.KO {
         "$hasFocus": hasFocusBind,
         "$value": valueBind,
         "$checked": checkedBind,
+        "$options": optionsBind,
 
     }
 
@@ -248,6 +249,18 @@ module WinJS.KO {
         };
     }
 
+    function optionsBind(source, sourceProps: string[], dest: HTMLInputElement): ICancelable {
+        var div = document.createElement("div");
+        div.innerHTML = "<option data-win-bind=\"textContent : $data WinJS.KO.defaultBind\"/>";
+        var template = new WinJS.Binding.Template(div);
+
+        new WinJS.KO.FlowControl(dest, {
+            template: template
+        });
+
+        return _flowControlBind(source, sourceProps, dest, "foreach");
+    }
+
     export class FlowControl {
         constructor(element: HTMLElement, options?: {}) {
             options = options || {};
@@ -277,7 +290,7 @@ module WinJS.KO {
 
 
             this._data = options["data"];
-            this._template = options["tempate"] || _createChildTemplate(element)
+            this._template = options["template"] || _createChildTemplate(element)
             this._type = options["type"];
             this._source = options["source"];
             this.element = element;
