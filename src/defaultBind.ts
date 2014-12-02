@@ -121,10 +121,9 @@ module WinJS.KO {
             var handlers = {};
             var events = getEvents(sourceData) || {};
             for (var key in events) {
-                var event = <Function>events[key];
-                if (typeof event == "function") {
+                if (typeof events[key] == "function") {
                     handlers[key] = function (evt: UIEvent) {
-                        if (true === event.apply(data, [data, evt])) {
+                        if (true === events[key].apply(data, [data, evt])) {
                             evt.preventDefault();
                         }
                     };
