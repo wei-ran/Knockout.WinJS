@@ -6,19 +6,24 @@
 module WinJS.KO {
 
     var _koBindings = {
-        "visible": visibleBind,
-        "text": textBind,
-        "html": htmlBind,
-        "click": clickBind,
-        "submit": submitBind,
-        "enable": enableBind,
-        "hasFocus": hasFocusBind,
-        "value": valueBind,
-        "checked": checkedBind,
+        //control flow bindings
         "$foreach": foreachBind,
-        "$with": withBind,
         "$if": ifBind,
         "$ifnot": ifNotBind,
+        "$with": withBind,
+        //event bindings
+        "$event": eventBind,
+        "$click": clickBind,
+        "$submit": submitBind,
+        //
+        "$visible": visibleBind,
+        "$text": textBind,
+        "$html": htmlBind,
+        "$enable": enableBind,
+        "$hasFocus": hasFocusBind,
+        "$value": valueBind,
+        "$checked": checkedBind,
+
     }
 
     export var defaultBind = WinJS.Binding.initializer(function (
@@ -99,54 +104,40 @@ module WinJS.KO {
         return _flowControlBind(source, sourceProps, dest, "ifnot");
     }
 
-    function clickBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
-        var data = {
-            onclick: function (obj) { },
-            context: source
-        };
-        var cancelable = WinJS.Binding.defaultBind(source, sourceProps, data, ["onclick"]);
-        dest.onclick = function () {
-            if (DataContext.isObservableDataContext(data.context)) {
-                data.onclick.call(WinJS.Binding.unwrap(data.context.$data));
-            }
-            else {
-                data.onclick.call(data.context);
-            }
-        }
 
-        return {
-            cancel: function () {
-                cancelable.cancel();
-                dest.onclick = undefined;
-            }
-        };
-    }
+    function _eventBind(source, sourceProps: string[], dest: HTMLElement, getEvents: Function): ICancelable {
 
-    function eventBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
-        function _foreachEvent(events, func: Function) {
-            events = events || {};
-            for (var key in events) {
-                var event = events[key];
-                if (typeof event == "function") {
-                    func(key, event);
-                }
-            }
-        }
+        var data = DataContext.isObservableDataContext(source) ? WinJS.Binding.unwrap(source.$data) : source;
 
         function _removeEvents() {
-            _foreachEvent(dest["_winjs_ko_eventBind"], function (key, event) {
-                dest.removeEventListener(key, event);
-            });
+            var handlers = dest["_winjs_ko_eventBind"] || {};
+
+            for (var key in handlers) {
+                dest.removeEventListener(key, handlers[key]);
+            }
         }
 
-        var converter = WinJS.Binding.converter(function (events) {
+        var converter = WinJS.Binding.converter(function (sourceData) {
+            var handlers = {};
+            var events = getEvents(sourceData) || {};
+            for (var key in events) {
+                var event = <Function>events[key];
+                if (typeof event == "function") {
+                    handlers[key] = function (evt: UIEvent) {
+                        if (true === event.apply(data, [data, evt])) {
+                            evt.preventDefault();
+                        }
+                    };
+                }
+            }
 
             _removeEvents();
 
-            _foreachEvent(events, function (key, event) {
-                dest.addEventListener(key, event);
-            });
+            for (var key in handlers) {
+                dest.addEventListener(key, handlers[key]);
+            }
 
+            return handlers;
         });
 
         var converterCancelable: ICancelable = converter(source, sourceProps, dest, ["_winjs_ko_eventBind"]);
@@ -156,34 +147,25 @@ module WinJS.KO {
                 converterCancelable.cancel();
                 _removeEvents();
             }
-        };
+        }
+    }
+       
+    function clickBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
+        return _eventBind(source, sourceProps, dest, function (event) {
+            return { click: event };
+        });
+    }
+
+    function eventBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
+        return _eventBind(source, sourceProps, dest, function (events) {
+            return events;
+        });
     }
 
     function submitBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
-
-        var submitEvent: Function;
-
-        var submitEventOuter = function (ev: Event) {
-            if (submitEvent && !submitEvent(ev)) {
-                ev.preventDefault();
-            }
-        }
-
-        dest.addEventListener("submit", submitEventOuter);
-
-        var converter = WinJS.Binding.converter(function (event) {
-            submitEvent = (typeof (event) == "function") ? event : null;
-            return submitEvent;
+        return _eventBind(source, sourceProps, dest, function (event) {
+            return { submit: event };
         });
-
-        var converterCancelable: ICancelable = converter(source, sourceProps, dest, ["_winjs_ko_submitBind"]);
-        return {
-            cancel: function () {
-                converterCancelable.cancel();
-                dest.removeEventListener("submit", submitEventOuter);
-            }
-        };
-
     }
 
     function enableBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
