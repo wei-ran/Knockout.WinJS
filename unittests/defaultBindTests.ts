@@ -51,47 +51,6 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
-    function textBind(complete) {
-        var o = wko.observable({t1:"<div>hello</div>", t2:"hello"});
-
-        var span = document.createElement("span");
-        var em = document.createElement("div");
-        document.body.appendChild(span);
-        document.body.appendChild(em);
-        span.setAttribute(WinJSBindingAttribute, "$text : t1 WinJS.KO.defaultBind");
-        em.setAttribute(WinJSBindingAttribute, "$text : t2 WinJS.KO.defaultBind");
-        wb.processAll(document.body, o).then(() => {
-            assert.equal(span.textContent, "<div>hello</div>");
-            assert.equal(em.textContent, "hello");
-
-            o.t1 = "hello";
-            o.t2 = "<div>hello</div>";
-            _scheduleNTimes(0, 10).then(() => {
-                assert.equal(em.textContent, "<div>hello</div>");
-                assert.equal(span.textContent, "hello");
-                document.body.removeChild(span);
-                document.body.removeChild(em);
-                complete();
-            });
-        });
-    }
-
-    function htmlBind(complete) {
-        var o = wko.observable("test1");
-        var div = document.createElement("div");
-        document.body.appendChild(div);
-        div.setAttribute(WinJSBindingAttribute, "$html : value WinJS.KO.defaultBind");
-        wb.processAll(div, o).then(() => {
-            assert.equal(div.innerHTML, "test1");
-            o.value = "<div>test</div>";
-            _scheduleNTimes(0, 10).then(() => {
-                assert.equal(div.innerHTML, "<div>test</div>");
-                document.body.removeChild(div);
-                complete();
-            });
-        });
-    }
-
     function _createFlowControl() {
         var div = document.createElement("div");
         div.setAttribute("data-win-control", "WinJS.KO.FlowControl");
@@ -331,11 +290,11 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
-    function enableBind(complete) {
+    function enabledBind(complete) {
         var o = wko.observable(false);
         var input = document.createElement("input");
         document.body.appendChild(input);
-        input.setAttribute(WinJSBindingAttribute, "$enable : value WinJS.KO.defaultBind");
+        input.setAttribute(WinJSBindingAttribute, "$enabled : value WinJS.KO.defaultBind");
         wb.processAll(input, o).then(() => {
             assert.ok(input.disabled);
             o.value = true;
@@ -418,20 +377,18 @@ module WinJS.Knockout.UnitTests {
     }
 
     var testCases = {
-        "Visible Bind": visibleBind,
-        "Text Bind": textBind,
-        "Html Bind" : htmlBind,
-        "Has Focus Bind": hasFocusBind,
+        "Foreach Bind": foreachBind,
         "If Bind": ifBind,
         "If Not Bind": ifNotBind,
         "With Bind": withBind,
-        "Foreach Bind": foreachBind,
         "Event Bind": eventBind,
         "Click Bind": clickBind,
         "Submit Bind": submitBind,
-        "Enable Bind": enableBind,
         "Value Bind": valueBind,
         "Checked Bind": checkedBind,
+        "Enabled Bind": enabledBind,
+        "Has Focus Bind": hasFocusBind,
+        "Visible Bind": visibleBind,
     };
 
     (function Run() {

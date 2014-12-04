@@ -15,14 +15,13 @@ module WinJS.KO {
         "$event": eventBind,
         "$click": clickBind,
         "$submit": submitBind,
-        //
-        "$visible": visibleBind,
-        "$text": textBind,
-        "$html": htmlBind,
-        "$enable": enableBind,
-        "$hasFocus": hasFocusBind,
+        //two-ways bindings
         "$value": valueBind,
         "$checked": checkedBind,
+        "$hasFocus": hasFocusBind,
+        //helper bindings
+        "$visible": visibleBind,
+        "$enabled": enableBind,
         "$options": optionsBind,
 
     }
@@ -59,14 +58,6 @@ module WinJS.KO {
         });
 
         return converter(source, sourceProps, dest, ["style", "display"]);
-    }
-
-    function textBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
-        return WinJS.Binding.defaultBind(source, sourceProps, dest, ["textContent"]);
-    }
-
-    function htmlBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
-        return WinJS.Binding.defaultBind(source, sourceProps, dest, ["innerHTML"]);
     }
 
     function _flowControlBind(source, sourceProps: string[], dest: HTMLElement, type: string): ICancelable {
@@ -233,11 +224,69 @@ module WinJS.KO {
     }
 
     function checkedBind(source, sourceProps: string[], dest: HTMLInputElement): ICancelable {
-        var defaultBindCancelable: ICancelable = WinJS.Binding.defaultBind(source, sourceProps, dest, ["checked"]);
+
+        function shouldBeChecked(data): boolean {
+            if (dest.tagName != "INPUT" || (dest.type != "checkbox" && dest.type != "radio"))
+                return false;
+            if (dest.type == "checkbox" && (data instanceof Array || data instanceof WinJS.Binding.List)) {
+                return data.indexOf(dest.value) >= 0;
+            }
+            else if (dest.type == "radio" && typeof data == "string") {
+                return data == dest.value;
+            }
+            else {
+                return data;
+            }
+        }
+
+        var checkedUpdater;
+
+        var converter = WinJS.Binding.converter(function (data) {
+            if (checkedUpdater) {
+                data.unbind("_array", checkedUpdater);
+                checkedUpdater = undefined;
+            }
+
+            if (WinJS.KO.isObservableArray(data)) {
+                checkedUpdater = function () {
+                    dest.checked = shouldBeChecked(data);
+                }
+                data.bind("_array", checkedUpdater);
+            }
+
+            return shouldBeChecked(data);
+        });
+
+        var defaultBindCancelable: ICancelable = converter(source, sourceProps, dest, ["checked"]);
 
         if (_isObservable(source)) {
             dest.onchange = function () {
-                _nestedSet(source, sourceProps, dest.checked);
+                _nestedSet(source, sourceProps, dest.checked, function (checked: boolean, oldValue): any {
+                    if (dest.type == "checkbox" && (oldValue instanceof Array || oldValue instanceof WinJS.Binding.List)) {
+                        var index = oldValue.indexOf(dest.value);
+                        if (checked && index < 0) {
+                            oldValue.push(dest.value);
+                        }
+                        else if (!checked && index >= 0) {
+                            oldValue.splice(index, 1);
+                        }
+                        return oldValue;
+                    }
+                    else if (dest.type == "radio" && typeof oldValue == "string") {
+                        if (checked) {
+                            return dest.value;
+                        }
+                        else if (oldValue == dest.value) {
+                            return undefined;
+                        }
+                        else {
+                            return oldValue;
+                        }
+                    }
+                    else {
+                        return checked;
+                    }
+                });
             }
         }
 
@@ -389,7 +438,7 @@ module WinJS.KO {
                             });
                         }
 
-                        if (this._data instanceof WinJS.Binding.List && this._data._array instanceof Array) {
+                        if (WinJS.KO.isObservableArray(this._data)) {
                             this._data.bind("_array", foreachUpdater);
                         }
                         else {
@@ -554,7 +603,7 @@ module WinJS.KO {
         return WinJS.Binding.unwrap(data) !== data;
     }
 
-    function _nestedSet(dest, destProperties: string[], v) {
+    function _nestedSet(dest, destProperties: string[], value, converter?: Function) {
         for (var i = 0, len = (destProperties.length - 1); i < len; i++) {
             dest = dest[destProperties[i]];
             if (!dest) {
@@ -562,7 +611,10 @@ module WinJS.KO {
             }
         }
         var prop = destProperties[destProperties.length - 1];
-        dest[prop] = v;
+        if (converter) {
+            value = converter(value, dest[prop]);
+        }
+        dest[prop] = value;
     }
 
     (function cctor() {
