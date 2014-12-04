@@ -52,7 +52,7 @@ module WinJS.KO {
         }
 
         var _initVal;
-        
+
 
         if (_computed.dispose) {
             _computed.dispose(_propName);
@@ -70,12 +70,12 @@ module WinJS.KO {
             computedProperty._removeAllDependencies();
 
             var value;
-            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_EVALUATIOR, new ObservableProperty(_computed, _propName)), function() {
-                value = evaluator(); 
+            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_EVALUATIOR, new ObservableProperty(_computed, _propName)), function () {
+                value = evaluator();
             });
 
             var dependencies = <ObservableProperty[]>(computedProperty._dependencies || []);
-            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_BIND), function() {
+            DependencyDetection.execute(new DependencyDetectionContext(DependencyDetectionContext.TYPE_COMPUTED_DEPENDENCY_BIND), function () {
                 dependencies.forEach(function (d) {
                     d._observable.bind(d._propertyName, computedUpdater);
                 });
@@ -107,7 +107,7 @@ module WinJS.KO {
                 writer.call(evaluatorFunctionTarget, value);
             };
         }
-      
+
         computedProperty._computedUpdater = computedUpdater;
 
         if (typeof _computed._lastUpdatedStamp == "function") {
@@ -124,7 +124,7 @@ module WinJS.KO {
         }
     }
 
-    export function observableArray(list?) : IObservableArray<any> {
+    export function observableArray(list?): IObservableArray<any> {
         var list = list || [];
         var winJSList = <any>new WinJS.Binding.List(list);
         var lastUpdatedStamp: UpdateStamp;
@@ -166,8 +166,11 @@ module WinJS.KO {
         return <IObservableArray<any>>winJSList;
     }
 
-    export function getRawArray<T>(list : WinJS.Binding.List<T>): T[]
-    {
+    export function isObservableArray(obj): boolean {
+        return obj instanceof WinJS.Binding.List && obj._array instanceof Array;
+    }
+
+    export function getRawArray<T>(list: WinJS.Binding.List<T>): T[] {
         if (list instanceof WinJS.Binding.List) {
             return list.map(function (v) {return v });
         }
@@ -178,19 +181,19 @@ module WinJS.KO {
     }
 
     function createObservable(winjsObservable) {
-        winjsObservable.addComputedProperty  = function(name: string, evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?, destObj?: any, destProp?: string) {
+        winjsObservable.addComputedProperty = function (name: string, evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?, destObj?: any, destProp?: string) {
             this.addProperty(name);
             computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
         }
 
-        var _getProperty : Function = winjsObservable.getProperty;
+        var _getProperty: Function = winjsObservable.getProperty;
 
-        winjsObservable.getProperty = function(name: string): any {
+        winjsObservable.getProperty = function (name: string): any {
             _bindComputedUpdaterIfNeccessary(this, name);
             return _getProperty.call(this, name);
         }
 
-        var _updateProperty : Function = winjsObservable.updateProperty;
+        var _updateProperty: Function = winjsObservable.updateProperty;
 
         winjsObservable.updateProperty = function (name: string, value: any, updateStamp?: UpdateStamp) {
             this._lastUpdatedStamp(name, updateStamp || UpdateStamp.newStamp());
@@ -199,9 +202,9 @@ module WinJS.KO {
 
         var _setProperty: Function = winjsObservable.setProperty;
         winjsObservable.setProperty = function (name: string, value: any) {
-            
-            var computedProperty : ComputedProperty = this._computedProperty(name);
-            if (computedProperty){
+
+            var computedProperty: ComputedProperty = this._computedProperty(name);
+            if (computedProperty) {
                 if (computedProperty._computedWriter) {
                     computedProperty._computedWriter(value);
                     return;
@@ -224,17 +227,17 @@ module WinJS.KO {
             }
         }
 
-        var _dispose : Function = winjsObservable.dispose;
+        var _dispose: Function = winjsObservable.dispose;
         winjsObservable.dispose = function (name?: string) {
             if (arguments.length > 0) {
-                
+
                 var property = this._computedProperty(name);
                 if (property) {
                     property._removeAllDependencies();
                     property._computedUpdater = null;
                     property._computedWriter = null
                     delete this._computedProperties[name];
-                }   
+                }
             }
             else {
                 if (_dispose) {
@@ -249,12 +252,12 @@ module WinJS.KO {
         //_winjsObservable: any;
         winjsObservable._lastUpdatedStamps = {};
 
-        winjsObservable._lastUpdatedStamp = function(name?: string, updateStamp?: UpdateStamp) : UpdateStamp {
+        winjsObservable._lastUpdatedStamp = function (name?: string, updateStamp?: UpdateStamp): UpdateStamp {
             this._lastUpdatedStamps = this._lastUpdatedStamps || {};
             if (arguments.length == 1) {
                 return this._lastUpdatedStamps[name];
             }
-            else if (arguments.length > 1){
+            else if (arguments.length > 1) {
                 this._lastUpdatedStamps[name] = updateStamp;
             }
         }
@@ -269,16 +272,16 @@ module WinJS.KO {
         }
 
         winjsObservable.computed = function (name: string, evaluatorFunctionOrOptions, evaluatorFunctionTarget?, options?) {
-                computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
+            computed(evaluatorFunctionOrOptions, evaluatorFunctionTarget, options, this, name);
         }
 
         winjsObservable.getDependenciesCount = function (name: string) {
-            var computedProperty : ComputedProperty = this._computedProperty(name);
+            var computedProperty: ComputedProperty = this._computedProperty(name);
             return computedProperty && computedProperty._dependencies ? computedProperty._dependencies.length : 0;
         }
     }
 
-    function _bindComputedUpdaterIfNeccessary(observable: IObservable, name : string) {
+    function _bindComputedUpdaterIfNeccessary(observable: IObservable, name: string) {
         var context = DependencyDetection.currentContext();
         if (context) {
             if (context.type == DependencyDetectionContext.TYPE_COMPUTED_EVALUATIOR) { //initial computed evaluator
@@ -289,8 +292,8 @@ module WinJS.KO {
                 }
 
                 var computed: ComputedProperty = observableProperty._observable._computedProperty(observableProperty._propertyName);
-                
-                    
+
+
                 var property = new ObservableProperty(observable, name);
                 var dependencies = <any[]>(computed._dependencies || []);
                 if (!dependencies.some(function (o) {
@@ -311,7 +314,7 @@ module WinJS.KO {
     }
 
     class ObservableProperty {
-        constructor(observable : IObservable, propertyName : string) {
+        constructor(observable: IObservable, propertyName: string) {
             this._observable = observable;
             this._propertyName = propertyName;
         }
@@ -330,7 +333,7 @@ module WinJS.KO {
                 d._observable.unbind(d._propertyName, computedUpdater);
             });
             this._dependencies = [];
-        }   
+        }
     }
 
     class DependencyDetectionContext {
@@ -352,7 +355,7 @@ module WinJS.KO {
         type: number; //0: initial evalutor, 1: computed updater, 2: writer intial run, 3: computed writer
         observableProperty: ObservableProperty;   //only needed for type 0
         upateStamp: UpdateStamp; //only need for type 1, 2, 3
-        
+
     }
 
     class DependencyDetection {
