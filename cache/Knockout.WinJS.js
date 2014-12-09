@@ -12,9 +12,11 @@
             "$value": valueBind,
             "$checked": checkedBind,
             "$hasFocus": hasFocusBind,
+            "$selectedOptions": selectedOptionsBind,
             "$visible": visibleBind,
             "$enabled": enableBind,
-            "$options": optionsBind
+            "$options": optionsBind,
+            "$option": optionBind
         };
 
         KO.defaultBind = WinJS.Binding.initializer(function (source, sourceProps, dest, destProps) {
@@ -202,14 +204,19 @@
 
         function checkedBind(source, sourceProps, dest) {
             function shouldBeChecked(data) {
-                if (dest.tagName != "INPUT" || (dest.type != "checkbox" && dest.type != "radio"))
+                if (dest.tagName != "INPUT")
                     return false;
-                if (dest.type == "checkbox" && (data instanceof Array || data instanceof WinJS.Binding.List)) {
-                    return data.indexOf(dest.value) >= 0;
-                } else if (dest.type == "radio" && typeof data == "string") {
+
+                if (dest.type == "checkbox") {
+                    if (data instanceof Array || data instanceof WinJS.Binding.List) {
+                        return data.indexOf(dest.value) >= 0;
+                    } else {
+                        return data;
+                    }
+                } else if (dest.type == "radio") {
                     return data == dest.value;
                 } else {
-                    return data;
+                    return false;
                 }
             }
 
@@ -244,7 +251,7 @@
                                 oldValue.splice(index, 1);
                             }
                             return oldValue;
-                        } else if (dest.type == "radio" && typeof oldValue == "string") {
+                        } else if (dest.type == "radio") {
                             if (checked) {
                                 return dest.value;
                             } else if (oldValue == dest.value) {
@@ -269,14 +276,106 @@
 
         function optionsBind(source, sourceProps, dest) {
             var div = document.createElement("div");
-            div.innerHTML = "<option data-win-bind=\"textContent : $data WinJS.KO.defaultBind\"/>";
+            div.innerHTML = "<option data-win-bind=\"$option : $data WinJS.KO.defaultBind\"/>";
             var template = new WinJS.Binding.Template(div);
 
             new WinJS.KO.FlowControl(dest, {
                 template: template
             });
-
             return _flowControlBind(source, sourceProps, dest, "foreach");
+        }
+
+        function optionBind(source, sourceProps, dest) {
+            var bindableData;
+
+            function disposeBindableData() {
+                if (bindableData) {
+                    bindableData.unbind("value", binableOptionUpdater);
+                    bindableData.unbind("text", binableOptionUpdater);
+                    bindableData = undefined;
+                }
+            }
+
+            function updateOption(data) {
+                if (data) {
+                    dest.value = data.value || data.text;
+                    dest.text = data.text;
+                }
+            }
+
+            function binableOptionUpdater() {
+                updateOption(bindableData);
+            }
+
+            var convert = WinJS.Binding.converter(function (data) {
+                disposeBindableData();
+                if (typeof data == "object") {
+                    bindableData = WinJS.Binding.as(data);
+                    bindableData.bind("value", binableOptionUpdater);
+                    bindableData.bind("textContent", binableOptionUpdater);
+                    return;
+                } else {
+                    updateOption({ value: data, text: data });
+                }
+            });
+
+            var cancelable = convert(source, sourceProps, dest, "_winjs_ko_option");
+            return {
+                cancel: function () {
+                    disposeBindableData();
+                    cancelable.cancel();
+                }
+            };
+        }
+
+        function selectedOptionsBind(source, sourceProps, dest) {
+            function updateSelectedOptions(selectedOptions) {
+                var child = dest.firstElementChild;
+                while (child) {
+                    if (child.tagName == "OPTION") {
+                        var option = child;
+                        option.selected = selectedOptions.indexOf(option.value) >= 0;
+                    }
+                    child = child.nextElementSibling;
+                }
+            }
+
+            var convert = WinJS.Binding.converter(function (selectedOptions) {
+                if (KO.isObservableArray(selectedOptions)) {
+                    selectedOptions.bind("_array", updateSelectedOptions);
+                } else {
+                    updateSelectedOptions(selectedOptions);
+                }
+            });
+
+            dest.onchange = function () {
+                var selected = [];
+                var child = dest.firstElementChild;
+                while (child) {
+                    if (child.tagName == "OPTION") {
+                        var option = child;
+                        if (option.selected) {
+                            selected.push(option.value);
+                        }
+                    }
+                    child = child.nextElementSibling;
+                }
+                _nestedSet(source, sourceProps, selected, function (newValue, oldValue) {
+                    if (oldValue instanceof Array || oldValue instanceof WinJS.Binding.List) {
+                        oldValue.splice(0, oldValue.length);
+                        oldValue.push.apply(oldValue, newValue);
+                    }
+                    return oldValue;
+                });
+            };
+
+            var cancel = convert(source, sourceProps, dest, "_winjs_ko_selectedOptions");
+            return {
+                cancel: function () {
+                    dest.onchange = undefined;
+                    cancel();
+                }
+            };
         }
 
         var FlowControl = (function () {
@@ -321,6 +420,11 @@
                 var _this = this;
                 var createElementWithDataContext = function (data, newContext, parentContext, index) {
                     var div = document.createElement("div");
+
+                    if (!data) {
+                        return div;
+                    }
+
                     if (newContext) {
                         var context = DataContext.createObservableDataContext(data, parentContext);
                         if (arguments.length >= 4) {
@@ -328,18 +432,25 @@
                         }
                         div["_winjs_ko_dataContext"] = context;
                     }
-                    if (data) {
-                        _this._template.render(data, div);
-                    }
+
+                    _this._template.render(data, div);
+
+                    var element;
 
                     if (div.childElementCount == 1) {
-                        var element = div.firstElementChild;
-                        div.removeChild(div.firstElementChild);
-                        element["_winjs_ko_dataContext"] = context;
-                        return element;
+                        element = div.firstElementChild;
+                        div.removeChild(element);
+                        element["_winjs_ko_dataContext"] = div["_winjs_ko_dataContext"];
+                    } else {
+                        element = div;
                     }
 
-                    return div;
+                    element._winjs_ko_dispose = function () {
+                        if (div["dispose"])
+                            div["dispose"]();
+                    };
+
+                    return element;
                 };
 
                 var createChildElement = function (data, newContext, parentContext) {
@@ -470,8 +581,9 @@
             FlowControl.prototype._disposeChildren = function () {
                 while (this.element.childElementCount > 0) {
                     var child = this.element.lastElementChild;
-                    if (typeof child["dispose"] == "function") {
-                        child["dispose"]();
+                    var disposeChild = child["_winjs_ko_dispose"];
+                    if (typeof disposeChild == "function") {
+                        disposeChild();
                     }
 
                     var childContext = child["_winjs_ko_dataContext"];
