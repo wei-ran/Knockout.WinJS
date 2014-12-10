@@ -19,7 +19,7 @@ module WinJS.KO {
         "$value": valueBind,
         "$checked": checkedBind,
         "$hasFocus": hasFocusBind,
-        "$selectedOptions": selectedOptionsBind,
+        "$selectedOptions" : selectedOptionsBind,
         //helper bindings
         "$visible": visibleBind,
         "$enabled": enableBind,
@@ -65,20 +65,32 @@ module WinJS.KO {
     function _flowControlBind(source, sourceProps: string[], dest: HTMLElement, type: string): ICancelable {
         var flowControl: FlowControl = dest.winControl;
 
+        var newFlowControl;
+
         if (!flowControl && dest.getAttribute("data-win-control") == "WinJS.KO.FlowControl") {
-            flowControl = new WinJS.KO.FlowControl(dest);
+            flowControl = newFlowControl = new WinJS.KO.FlowControl(dest);
         }
+
+        var cancelable;
 
         if (flowControl) {
             flowControl.type = type;
             flowControl.source = source;
-            return WinJS.Binding.defaultBind(source, sourceProps, dest, ["winControl", "data"]);
+            cancelable = WinJS.Binding.defaultBind(source, sourceProps, dest, ["winControl", "data"]);
         }
-        else {
-            return {
-                cancel: function () { }
+      
+       return {
+           cancel: function () {
+               if (cancelable) {
+                   cancelable.cancel();
+               }
+
+               if (newFlowControl) {
+                   newFlowControl.dispose();
+               }
             }
         }
+
     }
 
     function foreachBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
@@ -179,16 +191,16 @@ module WinJS.KO {
     function valueBind(source, sourceProps: string[], dest: HTMLInputElement): ICancelable {
         var defaultBindCancelable: ICancelable = WinJS.Binding.defaultBind(source, sourceProps, dest, ["value"]);
 
-        if (_isObservable(source)) {
-            dest.oninput = function () {
-                _nestedSet(source, sourceProps, dest.value);
-            }
+        function updateSource() {
+            _nestedSet(source, sourceProps, dest.value);
         }
+
+        dest.addEventListener("input", updateSource);
 
         return {
             cancel: function () {
                 defaultBindCancelable.cancel();
-                dest.oninput = null;
+                dest.removeEventListener("input", updateSource);
             }
         };
     }
@@ -207,20 +219,22 @@ module WinJS.KO {
                 hasFocus ? dest.focus() : dest.blur();
             }
 
-            if (_isObservable(source)) {
-                dest.onfocus = dest.onblur = function () {
-                    _nestedSet(source, sourceProps, elementHasFocus(dest));
-                }
-            }
-
             return hasFocus;
         });
+
+        function updateSource() {
+            _nestedSet(source, sourceProps, elementHasFocus(dest));
+        }
+
+        dest.addEventListener("focus", updateSource);
+        dest.addEventListener("blur", updateSource);
 
         var converterCancelable: ICancelable = converter(source, sourceProps, dest, ["_winjs_ko_hasFocus"]);
         return {
             cancel: function () {
                 converterCancelable.cancel();
-                dest.onfocus = dest.onblur = null;
+                dest.removeEventListener("focus", updateSource);
+                dest.removeEventListener("blur", updateSource);
             }
         };
     }
@@ -267,41 +281,41 @@ module WinJS.KO {
 
         var defaultBindCancelable: ICancelable = converter(source, sourceProps, dest, ["checked"]);
 
-        if (_isObservable(source)) {
-            dest.onchange = function () {
-                _nestedSet(source, sourceProps, dest.checked, function (checked: boolean, oldValue): any {
-                    if (dest.type == "checkbox" && (oldValue instanceof Array || oldValue instanceof WinJS.Binding.List)) {
-                        var index = oldValue.indexOf(dest.value);
-                        if (checked && index < 0) {
-                            oldValue.push(dest.value);
-                        }
-                        else if (!checked && index >= 0) {
-                            oldValue.splice(index, 1);
-                        }
-                        return oldValue;
+        function updateSource() {
+            _nestedSet(source, sourceProps, dest.checked, function (checked: boolean, oldValue): any {
+                if (dest.type == "checkbox" && (oldValue instanceof Array || oldValue instanceof WinJS.Binding.List)) {
+                    var index = oldValue.indexOf(dest.value);
+                    if (checked && index < 0) {
+                        oldValue.push(dest.value);
                     }
-                    else if (dest.type == "radio") {
-                        if (checked) {
-                            return dest.value;
-                        }
-                        else if (oldValue == dest.value) {
-                            return undefined;
-                        }
-                        else {
-                            return oldValue;
-                        }
+                    else if (!checked && index >= 0) {
+                        oldValue.splice(index, 1);
+                    }
+                    return oldValue;
+                }
+                else if (dest.type == "radio") {
+                    if (checked) {
+                        return dest.value;
+                    }
+                    else if (oldValue == dest.value) {
+                        return undefined;
                     }
                     else {
-                        return checked;
+                        return oldValue;
                     }
-                });
-            }
+                }
+                else {
+                    return checked;
+                }
+            });
         }
+
+        dest.addEventListener("change", updateSource);
 
         return {
             cancel: function () {
                 defaultBindCancelable.cancel();
-                dest.onchange = null;
+                dest.removeEventListener("change", updateSource);
             }
         };
     }
@@ -311,10 +325,17 @@ module WinJS.KO {
         div.innerHTML = "<option data-win-bind=\"$option : $data WinJS.KO.defaultBind\"/>";
         var template = new WinJS.Binding.Template(div);
 
-        new WinJS.KO.FlowControl(dest, {
+        var flowControl = new WinJS.KO.FlowControl(dest, {
             template: template
         });
-        return _flowControlBind(source, sourceProps, dest, "foreach");
+        var cancelable = _flowControlBind(source, sourceProps, dest, "foreach");
+
+        return {
+            cancel: function () {
+                cancelable.cancel();
+                flowControl.dispose();
+            }
+        };
     }
 
     function optionBind(source, sourceProps: string[], dest: HTMLOptionElement): ICancelable {
@@ -382,7 +403,7 @@ module WinJS.KO {
             }
         });
 
-        dest.onchange = function () {
+        function updateSource() {
             var selected = [];
             var child = dest.firstElementChild;
             while (child) {
@@ -403,10 +424,12 @@ module WinJS.KO {
             });
         };
 
+        dest.addEventListener("change", updateSource);
+
         var cancel = convert(source, sourceProps, dest, "_winjs_ko_selectedOptions");
         return {
             cancel: function () {
-                dest.onchange = undefined;
+                dest.removeEventListener("change", updateSource);
                 cancel();
             }
         }
@@ -475,7 +498,7 @@ module WinJS.KO {
                     }
                     div["_winjs_ko_dataContext"] = context;
                 }
-
+                
                 this._template.render(data, div);
 
                 var element;
@@ -613,7 +636,7 @@ module WinJS.KO {
             while (this.element.childElementCount > 0) {
                 var child = this.element.lastElementChild;
                 var disposeChild = child["_winjs_ko_dispose"];
-                if (typeof disposeChild == "function") {
+                if (typeof  disposeChild == "function") {
                     disposeChild();
                 }
 
