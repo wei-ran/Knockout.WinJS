@@ -19,13 +19,12 @@ module WinJS.KO {
         "$value": valueBind,
         "$checked": checkedBind,
         "$hasFocus": hasFocusBind,
-        "$selectedOptions" : selectedOptionsBind,
+        "$selectedOptions": selectedOptionsBind,
         //helper bindings
         "$visible": visibleBind,
         "$enabled": enableBind,
         "$options": optionsBind,
         "$option": optionBind,
-
     }
 
     export var defaultBind = WinJS.Binding.initializer(function (
@@ -47,11 +46,31 @@ module WinJS.KO {
         }
 
         return WinJS.Binding.defaultBind(data, sourceProps, dest, destProps)
-
     });
 
     interface ICancelable {
         cancel();
+    }
+
+    class Cancelable implements ICancelable {
+        _innerCancelables : any[];
+
+        constructor(...innerCancelables : any[]) {
+            this._innerCancelables = innerCancelables;
+        }
+
+        cancel() {
+            if (this._innerCancelables) {
+                this._innerCancelables.forEach(function (cancelable) {
+                    if (cancelable instanceof Function) {
+                        cancelable();
+                    }
+                    else if (cancelable && cancelable.cancel instanceof Function) {
+                        cancelable.cancel();
+                    }
+                });
+            }
+        }
     }
 
     function visibleBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
@@ -78,19 +97,12 @@ module WinJS.KO {
             flowControl.source = source;
             cancelable = WinJS.Binding.defaultBind(source, sourceProps, dest, ["winControl", "data"]);
         }
-      
-       return {
-           cancel: function () {
-               if (cancelable) {
-                   cancelable.cancel();
-               }
 
-               if (newFlowControl) {
-                   newFlowControl.dispose();
-               }
+        return new Cancelable(cancelable, function () {
+            if (newFlowControl) {
+                newFlowControl.dispose();
             }
-        }
-
+        });
     }
 
     function foreachBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
@@ -153,12 +165,7 @@ module WinJS.KO {
 
         var converterCancelable: ICancelable = converter(source, sourceProps, dest, ["_winjs_ko_eventBind"]);
 
-        return {
-            cancel: function () {
-                converterCancelable.cancel();
-                _removeEvents();
-            }
-        }
+        return new Cancelable(converterCancelable, _removeEvents);
     }
 
     function clickBind(source, sourceProps: string[], dest: HTMLElement): ICancelable {
@@ -197,12 +204,9 @@ module WinJS.KO {
 
         dest.addEventListener("input", updateSource);
 
-        return {
-            cancel: function () {
-                defaultBindCancelable.cancel();
-                dest.removeEventListener("input", updateSource);
-            }
-        };
+        return new Cancelable(defaultBindCancelable, function () {
+            dest.removeEventListener("input", updateSource);
+        });
     }
 
     function hasFocusBind(source, sourceProps: string[], dest: HTMLElement) {
@@ -230,13 +234,10 @@ module WinJS.KO {
         dest.addEventListener("blur", updateSource);
 
         var converterCancelable: ICancelable = converter(source, sourceProps, dest, ["_winjs_ko_hasFocus"]);
-        return {
-            cancel: function () {
-                converterCancelable.cancel();
-                dest.removeEventListener("focus", updateSource);
-                dest.removeEventListener("blur", updateSource);
-            }
-        };
+        return new Cancelable(converterCancelable, function () {
+            dest.removeEventListener("focus", updateSource);
+            dest.removeEventListener("blur", updateSource);
+        });
     }
 
     function checkedBind(source, sourceProps: string[], dest: HTMLInputElement): ICancelable {
@@ -279,7 +280,7 @@ module WinJS.KO {
             return shouldBeChecked(data);
         });
 
-        var defaultBindCancelable: ICancelable = converter(source, sourceProps, dest, ["checked"]);
+        var converterCancelable: ICancelable = converter(source, sourceProps, dest, ["checked"]);
 
         function updateSource() {
             _nestedSet(source, sourceProps, dest.checked, function (checked: boolean, oldValue): any {
@@ -312,12 +313,9 @@ module WinJS.KO {
 
         dest.addEventListener("change", updateSource);
 
-        return {
-            cancel: function () {
-                defaultBindCancelable.cancel();
-                dest.removeEventListener("change", updateSource);
-            }
-        };
+        return new Cancelable(converterCancelable, function () {
+            dest.removeEventListener("change", updateSource);
+        });
     }
 
     function optionsBind(source, sourceProps: string[], dest: HTMLSelectElement): ICancelable {
@@ -330,12 +328,9 @@ module WinJS.KO {
         });
         var cancelable = _flowControlBind(source, sourceProps, dest, "foreach");
 
-        return {
-            cancel: function () {
-                cancelable.cancel();
-                flowControl.dispose();
-            }
-        };
+        return new Cancelable(cancelable, function () {
+            flowControl.dispose();
+        });
     }
 
     function optionBind(source, sourceProps: string[], dest: HTMLOptionElement): ICancelable {
@@ -373,13 +368,8 @@ module WinJS.KO {
             }
         });
 
-        var cancelable = convert(source, sourceProps, dest, "_winjs_ko_option");
-        return {
-            cancel: function () {
-                disposeBindableData();
-                cancelable.cancel();
-            }
-        };
+        var converterCancelable = convert(source, sourceProps, dest, "_winjs_ko_option");
+        return new Cancelable(converterCancelable, disposeBindableData);
     }
 
     function selectedOptionsBind(source, sourceProps: string[], dest: HTMLSelectElement): ICancelable {
@@ -426,13 +416,10 @@ module WinJS.KO {
 
         dest.addEventListener("change", updateSource);
 
-        var cancel = convert(source, sourceProps, dest, "_winjs_ko_selectedOptions");
-        return {
-            cancel: function () {
-                dest.removeEventListener("change", updateSource);
-                cancel();
-            }
-        }
+        var convertCancelable = convert(source, sourceProps, dest, "_winjs_ko_selectedOptions");
+        return new Cancelable(convertCancelable, function () {
+            dest.removeEventListener("change", updateSource);
+        });
     }
 
     export class FlowControl {
