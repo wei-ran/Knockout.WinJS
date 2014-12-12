@@ -320,7 +320,7 @@ module WinJS.Knockout.UnitTests {
                 _scheduleNTimes(0, 10).then(() => {
                     
                     input.value = "test3"
-                    input.oninput(null);
+                    _dispatchEvent("input", input);
                     _scheduleNTimes(0, 10).then(() => {
                         
                         assert.equal(o.value, "test3");
@@ -345,7 +345,7 @@ module WinJS.Knockout.UnitTests {
                 assert.ok(!input.checked);
                 _scheduleNTimes(0, 10).then(() => {
                     input.checked = true;
-                    input.onchange(null);
+                    _dispatchEvent("change", input);
                     _scheduleNTimes(0, 10).then(() => {
                         assert.ok(o.value);
                         document.body.removeChild(input);
@@ -400,13 +400,8 @@ module WinJS.Knockout.UnitTests {
 
                 
                 select.children[2]["selected"] = true;
-                var evt = document.createEvent('HTMLEvents');
-                evt.initEvent("change", false, false);
-                select.dispatchEvent(evt);
+                _dispatchEvent("change", select);
 
-
-                
-                
                 _scheduleNTimes(0, 10).then(() => {
                     assert.equal(viewModel.selected.length, 2);
                     assert.equal(viewModel.selected.getAt(0), "v3");
@@ -438,6 +433,12 @@ module WinJS.Knockout.UnitTests {
         }
 
         return currentPromise || promise.as(0);
+    }
+
+    function _dispatchEvent(event : string, element : HTMLElement) {
+        var evt = document.createEvent('HTMLEvents');
+        evt.initEvent(event, false, false);
+        element.dispatchEvent(evt);
     }
 
     var testCases = {
