@@ -73,27 +73,61 @@ module WinJS.KO {
         }
     }
 
-    export function converter(convert: Function) {
+    export function converter(convert) {
         return WinJS.Utilities.markSupportedForProcessing(
             function (source, sourceProps: string[], dest: HTMLElement, destProps: string[]) {
                 return defaultBind(source, sourceProps, dest, destProps, convert);
             });
     }
 
+    export function computedConverter(convert: Function, updater?: Function) {
+        return converter(new ComputedConverter(convert, updater));
+    }
+
+    class ComputedConverter {
+        constructor(converter: Function, updater: Function) {
+            this.converter = converter;
+            this.updater = updater;
+        }
+
+        converter: Function;
+        updater: Function;
+    }
+
     function defaultConvert(data) {
         return data;
     }
 
-    function createBinding(source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConvert?: Function, convert?: Function, dispose? : Function) : ICancelable {
+    function createBinding(source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConvert?: any, convert?: Function, dispose? : Function) : ICancelable {
         customConvert = customConvert || defaultConvert;
         convert = convert || defaultConvert;
+        var disposeComputed;
 
         var convertCancelable = WinJS.Binding.converter(function (data) {
-            return convert(customConvert(data));
+            var convertedData;
+            if (customConvert instanceof ComputedConverter) {
+                var computedObj = computed(function () {
+                    return customConvert.converter(WinJS.Binding.as(data));
+                });
+                convertedData = computedObj.value;
+                var updater = customConvert.updater || function (value) {
+                    _nestedSet(dest, destProps, value, convert);
+                };
+                computedObj.bind("value", updater);
+
+                disposeComputed = function () {
+                    computedObj.unbind("value", updater);
+                }
+            }
+            else {
+                convertedData = customConvert(data);
+            }
+
+            return convert(convertedData);
         })(source, sourceProps, dest, destProps);
 
         if (dispose) {
-            return new Cancelable(convertCancelable, dispose);
+            return new Cancelable(convertCancelable, dispose, disposeComputed);
         }
         else {
             return <any>convertCancelable;
@@ -349,16 +383,6 @@ module WinJS.KO {
     }
 
     function optionBind(source, sourceProps: string[], dest: HTMLOptionElement, convert: Function): ICancelable {
-        var bindableData;
-
-        function disposeBindableData() {
-            if (bindableData) {
-                bindableData.unbind("value", binableOptionUpdater);
-                bindableData.unbind("text", binableOptionUpdater);
-                bindableData = undefined;
-            }
-        }
-
         function updateOption(data) {
             if (data) {
                 dest.value = data.value || data.text;
@@ -366,22 +390,25 @@ module WinJS.KO {
             }
         }
 
-        function binableOptionUpdater() {
-            updateOption(bindableData);
+        if (!convert) {
+            convert = function (data) {
+                if (typeof data == "string") {
+                    return {
+                        value: data,
+                        text: data
+                    }
+                }
+                else (typeof data == "object")
+                {
+                    return {
+                        value: data.value,
+                        text: data.text
+                    }
+                }
+            }
         }
 
-        return createBinding(source, sourceProps, dest, ["_winjs_ko_option"], convert, function (data) {
-            disposeBindableData();
-            if (typeof data == "object") {
-                bindableData = WinJS.Binding.as(data);
-                bindableData.bind("value", binableOptionUpdater);
-                bindableData.bind("textContent", binableOptionUpdater);
-                return;
-            }
-            else {
-                updateOption({ value: data, text: data });
-            }
-        }, disposeBindableData);
+        return createBinding(source, sourceProps, dest, ["_winjs_ko_option"], new ComputedConverter(convert, updateOption));
     }
 
     function selectedOptionsBind(source, sourceProps: string[], dest: HTMLSelectElement): ICancelable {
