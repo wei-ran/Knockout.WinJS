@@ -159,7 +159,7 @@ module WinJS.KO {
         flowControl.type = type;
         flowControl.source = source;
 
-        return createBinding(source, sourceProps, dest, ["winControl", "data"], undefined, undefined, function () {
+        return createBinding(source, sourceProps, dest, ["winControl", "data"], convert, undefined, function () {
             if (newFlowControl) {
                 newFlowControl.dispose();
             }
@@ -469,7 +469,7 @@ module WinJS.KO {
                 return;
             }
 
-            function _createChildTemplate(root: HTMLElement, convert : Function): WinJS.Binding.Template {
+            function _createChildTemplate(root: HTMLElement): WinJS.Binding.Template {
                 var template = document.createElement("div");
                 template.innerHTML = root.innerHTML;
 
@@ -482,7 +482,7 @@ module WinJS.KO {
                 }
 
                 var _template = new WinJS.Binding.Template(<any>template);
-                _template.bindingInitializer = WinJS.KO.converter(convert);
+                _template.bindingInitializer = WinJS.KO.defaultBind;
                 (<any>template).isDeclarativeControlContainer = true;
 
                 return _template;
@@ -490,7 +490,7 @@ module WinJS.KO {
 
 
             this._data = options["data"];
-            this._template = options["template"] || _createChildTemplate(element, options["converter"])
+            this._template = options["template"] || _createChildTemplate(element)
             this._type = options["type"];
             this._source = options["source"];
             this.element = element;
