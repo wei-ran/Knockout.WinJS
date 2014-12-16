@@ -415,6 +415,59 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
+    function optionsBindWithConverter(complete) {
+        var v1 = WinJS.KO.observable({ f1: "v1", f2: "ttt" });
+        var viewModel = WinJS.KO.observable({
+            options: WinJS.KO.observableArray([
+                v1,
+                { text: "v2" },
+                "v3"]),
+            selected: WinJS.KO.observableArray(["v1", "v2", "v3"]),
+        });
+
+        myConverter = WinJS.KO.computedConverter(function (d) {
+            if (d.f1 || d.f2) {
+                return { value: d.f1, text: d.f2 };
+            }
+            else if (d.text) {
+                return d;
+            }
+            else {
+                return { text: d };
+            }
+        });
+
+        var select = document.createElement("select");
+        document.body.appendChild(select);
+        select.setAttribute(WinJSBindingAttribute, "$options : options WinJS.Knockout.UnitTests.myConverter");
+        wb.processAll(select, viewModel).then(() => {
+            assert.equal(select.children[0]["value"], "v1");
+            assert.equal(select.children[0]["textContent"], "ttt");
+            assert.equal(select.children[1]["value"], "v2");
+            assert.equal(select.children[1]["textContent"], "v2");
+            assert.equal(select.children[2]["value"], "v3");
+            assert.equal(select.children[2]["textContent"], "v3");
+
+            v1.f1 = "v11";
+            v1.f2 = "new value";
+            viewModel.selected.splice(0, 1);
+            viewModel.options.push({ f1: "v4", f2: "ttt2" });
+            viewModel.options.splice(1, 1);
+
+            _scheduleNTimes(0, 100).then(() => {
+                assert.equal(select.children[0]["value"], "v11");
+                assert.equal(select.children[0]["textContent"], "new value");
+                assert.equal(select.children[1]["value"], "v3");
+                assert.equal(select.children[1]["textContent"], "v3");
+                assert.equal(select.children[2]["value"], "v4");
+                assert.equal(select.children[2]["textContent"], "ttt2");
+
+                document.body.removeChild(select);
+                complete();
+            });
+        });
+    }
+
     function _post(v): WinJS.Promise<any> {
         return WinJS.Utilities.Scheduler.schedulePromiseNormal().then(function () { return v; });
     }
@@ -454,8 +507,11 @@ module WinJS.Knockout.UnitTests {
         "Enabled Bind": enabledBind,
         "Has Focus Bind": hasFocusBind,
         "Visible Bind": visibleBind,
-        "Options Bind" : optionsBind,
+        "Options Bind": optionsBind,
+        "Options Bind with converter": optionsBindWithConverter
     };
+
+    export var myConverter;
 
     (function Run() {
         Object.keys(testCases).forEach((key) => {

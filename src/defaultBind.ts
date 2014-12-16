@@ -375,14 +375,14 @@ module WinJS.KO {
         var flowControl = new WinJS.KO.FlowControl(dest, {
             template: template
         });
-        var cancelable = _controlFlowBind(source, sourceProps, dest, convert, "foreach");
+        var cancelable = _controlFlowBind(source, sourceProps, dest, undefined, "foreach");
 
         return new Cancelable(cancelable, function () {
             flowControl.dispose();
         });
     }
 
-    function optionBind(source, sourceProps: string[], dest: HTMLOptionElement, convert: Function): ICancelable {
+    function optionBind(source, sourceProps: string[], dest: HTMLOptionElement, convert: any): ICancelable {
         function updateOption(data) {
             if (data) {
                 dest.value = data.value || data.text;
@@ -408,7 +408,20 @@ module WinJS.KO {
             }
         }
 
-        return createBinding(source, sourceProps, dest, ["_winjs_ko_option"], new ComputedConverter(convert, updateOption));
+        var _computedConverter;
+        if (convert instanceof Function) {
+            _computedConverter = new ComputedConverter(convert, updateOption);
+        }
+        else if (convert instanceof ComputedConverter) {
+            _computedConverter = new ComputedConverter(convert.converter, function (value) {
+                if (convert.updater) {
+                    convert.updater(value);
+                }
+                updateOption(value);
+            });
+        }
+
+        return createBinding(source, sourceProps, dest, ["_winjs_ko_option"], _computedConverter);
     }
 
     function selectedOptionsBind(source, sourceProps: string[], dest: HTMLSelectElement): ICancelable {
