@@ -51,6 +51,24 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
+    function visibleBindWithNegConverter(complete) {
+        var o = wko.observable(false);
+
+        var div = document.createElement("div");
+        document.body.appendChild(div);
+        div.setAttribute(WinJSBindingAttribute, "$visible : value WinJS.KO.negConverter");
+        wb.processAll(div, o).then(() => {
+            assert.ok(!div.style.display);
+            o.value = true;
+            _scheduleNTimes(0, 10).then(() => {
+                assert.equal(div.style.display, "none");
+                document.body.removeChild(div);
+                complete();
+            });
+        });
+    }
+
+
     function _createFlowControl() {
         var div = document.createElement("div");
         div.setAttribute("data-win-control", "WinJS.KO.FlowControl");
@@ -507,6 +525,7 @@ module WinJS.Knockout.UnitTests {
         "Enabled Bind": enabledBind,
         "Has Focus Bind": hasFocusBind,
         "Visible Bind": visibleBind,
+        "Visible Bind with Negative Converter": visibleBindWithNegConverter,
         "Options Bind": optionsBind,
         "Options Bind with converter": optionsBindWithConverter
     };

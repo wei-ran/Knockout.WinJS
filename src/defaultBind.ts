@@ -84,6 +84,10 @@ module WinJS.KO {
         return converter(new ComputedConverter(convert, updater));
     }
 
+    export var negConverter = converter(function (value) {
+        return !value;
+    });
+
     class ComputedConverter {
         constructor(converter: Function, updater: Function) {
             this.converter = converter;
