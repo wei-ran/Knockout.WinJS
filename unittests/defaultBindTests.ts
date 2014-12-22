@@ -374,6 +374,80 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
+    function checkedBindArray(complete) {
+        var o = wko.observable({
+            available: ["a", "b", "c", "d"],
+            selected: wko.observableArray(["b", "d"])
+        });
+        var div = _createFlowControl();
+        div.setAttribute(WinJSBindingAttribute, "$foreach : available WinJS.KO.defaultBind");
+        var input = document.createElement("input");
+        input.type = "checkbox";
+        input.setAttribute(WinJSBindingAttribute, "value: $data WinJS.KO.defaultBind; $checked : $parent.selected WinJS.KO.defaultBind;");
+        document.body.appendChild(div);
+        div.appendChild(input);
+        
+        wb.processAll(div, o).then(() => {
+            assert.ok(!div.children[0]["checked"]);
+            assert.ok(div.children[1]["checked"]);
+            assert.ok(!div.children[2]["checked"]);
+            assert.ok(div.children[3]["checked"]);
+            o.selected.push("c");
+            o.selected.splice(0, 1);
+            _scheduleNTimes(0, 100).then(() => {
+                assert.ok(!div.children[0]["checked"]);
+                assert.ok(!div.children[1]["checked"]);
+                assert.ok(div.children[2]["checked"]);
+                assert.ok(div.children[3]["checked"]);
+                div.children[0]["checked"] = true;
+                div.children[3]["checked"] = false;
+                _dispatchEvent("change", <any>div.children[0]);
+                _dispatchEvent("change", <any>div.children[3]);
+                _scheduleNTimes(0, 10).then(() => {
+                    assert.ok(o.selected.indexOf("a") >= 0);
+                    assert.ok(o.selected.indexOf("b") < 0);
+                    assert.ok(o.selected.indexOf("c") >= 0);
+                    assert.ok(o.selected.indexOf("d") < 0);
+                    document.body.removeChild(div);
+                    complete();
+                });
+            });
+        });
+    }
+
+    function checkedBindRidioArray(complete) {
+        var o = wko.observable({
+            available: ["a", "b", "c"],
+            selected: "b"
+        });
+        var div = _createFlowControl();
+        div.setAttribute(WinJSBindingAttribute, "$foreach : available WinJS.KO.defaultBind");
+        var input = document.createElement("input");
+        input.type = "radio";
+        input.setAttribute(WinJSBindingAttribute, "value: $data WinJS.KO.defaultBind; $checked : $parent.selected WinJS.KO.defaultBind;");
+        document.body.appendChild(div);
+        div.appendChild(input);
+
+        wb.processAll(div, o).then(() => {
+            assert.ok(!div.children[0]["checked"]);
+            assert.ok(div.children[1]["checked"]);
+            assert.ok(!div.children[2]["checked"]);
+            o.selected = "c";
+            _scheduleNTimes(0, 100).then(() => {
+                assert.ok(!div.children[0]["checked"]);
+                assert.ok(!div.children[1]["checked"]);
+                assert.ok(div.children[2]["checked"]);
+                div.children[0]["checked"] = true;
+                _dispatchEvent("change", <any>div.children[0]);
+                _scheduleNTimes(0, 10).then(() => {
+                    assert.equal(o.selected, "a");
+                    document.body.removeChild(div);
+                    complete();
+                });
+            });
+        });
+    }
+
     function optionsBind(complete) {
         var v1 = WinJS.KO.observable({ value: "v1", text: "ttt" });
         var viewModel = WinJS.KO.observable({
@@ -522,6 +596,8 @@ module WinJS.Knockout.UnitTests {
         "Submit Bind": submitBind,
         "Value Bind": valueBind,
         "Checked Bind": checkedBind,
+        "Checked Bind (Array)": checkedBindArray,
+        "Checked Bind (Ridio Array)" : checkedBindRidioArray,
         "Enabled Bind": enabledBind,
         "Has Focus Bind": hasFocusBind,
         "Visible Bind": visibleBind,
