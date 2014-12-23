@@ -28,7 +28,7 @@ module WinJS.KO {
     }
 
     export var defaultBind = WinJS.Binding.initializer(function (
-        source, sourceProps: string[], dest: HTMLElement, destProps: string[], converter? : Function): ICancelable {
+        source, sourceProps: string[], dest: HTMLElement, destProps: string[], converter?: Function): ICancelable {
 
         var data = source;
         if (destProps.length > 0 && _dataContextMemebrs[sourceProps[0]]) {
@@ -53,9 +53,9 @@ module WinJS.KO {
     }
 
     class Cancelable implements ICancelable {
-        _innerCancelables : any[];
+        _innerCancelables: any[];
 
-        constructor(...innerCancelables : any[]) {
+        constructor(...innerCancelables: any[]) {
             this._innerCancelables = innerCancelables;
         }
 
@@ -73,60 +73,68 @@ module WinJS.KO {
         }
     }
 
-    export function converter(convert) {
+    class CustomConverter {
+        constructor(convert: Function, convertBack?: Function, isComputed?: boolean) {
+            this.convert = convert;
+            this.convertBack = convertBack;
+            this.isComputed = isComputed;
+        }
+
+        convert: Function;
+        convertBack: Function;
+        isComputed: boolean;
+    }
+
+    function _converter(customConverter: CustomConverter) {
         return WinJS.Utilities.markSupportedForProcessing(
             function (source, sourceProps: string[], dest: HTMLElement, destProps: string[]) {
-                return defaultBind(source, sourceProps, dest, destProps, convert);
+                return defaultBind(source, sourceProps, dest, destProps, customConverter);
             });
     }
 
-    export function computedConverter(convert: Function, updater?: Function) {
-        return converter(new ComputedConverter(convert, updater));
+    export function converter(convert: Function, convertBack?: Function) {
+        return _converter(new CustomConverter(convert, convertBack));
+    }
+
+    export function computedConverter(convert: Function, convertBack?: Function) {
+        return _converter(new CustomConverter(convert, convertBack, true));
     }
 
     export var negConverter = converter(function (value) {
         return !value;
     });
 
-    class ComputedConverter {
-        constructor(converter: Function, updater: Function) {
-            this.converter = converter;
-            this.updater = updater;
-        }
-
-        converter: Function;
-        updater: Function;
-    }
-
     function defaultConvert(data) {
         return data;
     }
 
-    function createBinding(source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConvert?: any, convert?: Function, dispose? : Function) : ICancelable {
-        customConvert = customConvert || defaultConvert;
+    function createBinding(source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConverter?: CustomConverter, convert?: Function, dispose?: Function): ICancelable {
+        //customConverter = customConverter || defaultConvert;
         convert = convert || defaultConvert;
         var disposeComputed;
 
         var convertCancelable = WinJS.Binding.converter(function (data) {
-            var convertedData;
-            if (customConvert instanceof ComputedConverter) {
-                var computedObj = computed(function () {
-                    return customConvert.converter(WinJS.Binding.as(data));
-                });
-                convertedData = computedObj.value;
-                var updater = customConvert.updater || function (value) {
-                    _nestedSet(dest, destProps, value, convert);
-                };
-                computedObj.bind("value", updater);
+            var convertedData = data;
 
-                disposeComputed = function () {
-                    computedObj.unbind("value", updater);
+            if (customConverter instanceof CustomConverter && customConverter.convert instanceof Function) {
+                if (customConverter.isComputed) {
+                    var computedObj = computed(function () {
+                        return customConverter.convert(WinJS.Binding.as(data));
+                    });
+                    convertedData = computedObj.value;
+                    var updater = function (value) {
+                        _nestedSet(dest, destProps, value, convert);
+                    };
+                    computedObj.bind("value", updater);
+
+                    disposeComputed = function () {
+                        computedObj.unbind("value", updater);
+                    }
+                }
+                else {
+                    convertedData = customConverter.convert(data);
                 }
             }
-            else {
-                convertedData = customConvert(data);
-            }
-
             return convert(convertedData);
         })(source, sourceProps, dest, destProps);
 
@@ -136,22 +144,22 @@ module WinJS.KO {
         else {
             return <any>convertCancelable;
         }
-       
+
     }
 
-    function visibleBind(source, sourceProps: string[], dest: HTMLElement, convert: Function): ICancelable {
-        return createBinding(source, sourceProps, dest, ["style", "display"], convert, function (visible: boolean) {
+    function visibleBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
+        return createBinding(source, sourceProps, dest, ["style", "display"], customConverter, function (visible: boolean) {
             return visible ? "" : "none";
         });
     }
 
-    function _controlFlowBind(source, sourceProps: string[], dest: HTMLElement, convert : Function, type: string): ICancelable {
+    function _controlFlowBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter, type: string): ICancelable {
         var flowControl: FlowControl = dest.winControl;
 
         var newFlowControl;
 
         if (!flowControl && dest.getAttribute("data-win-control") == "WinJS.KO.FlowControl") {
-            flowControl = newFlowControl = new WinJS.KO.FlowControl(dest, {converter: convert});
+            flowControl = newFlowControl = new WinJS.KO.FlowControl(dest, { converter: customConverter });
         }
 
         var cancelable;
@@ -163,32 +171,32 @@ module WinJS.KO {
         flowControl.type = type;
         flowControl.source = source;
 
-        return createBinding(source, sourceProps, dest, ["winControl", "data"], convert, undefined, function () {
+        return createBinding(source, sourceProps, dest, ["winControl", "data"], customConverter, undefined, function () {
             if (newFlowControl) {
                 newFlowControl.dispose();
             }
         });
     }
 
-    function foreachBind(source, sourceProps: string[], dest: HTMLElement, convert : Function): ICancelable {
-        return _controlFlowBind(source, sourceProps, dest, convert, "foreach");
+    function foreachBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
+        return _controlFlowBind(source, sourceProps, dest, customConverter, "foreach");
     }
 
 
-    function withBind(source, sourceProps: string[], dest: HTMLElement, convert : Function): ICancelable {
-        return _controlFlowBind(source, sourceProps, dest, convert, "with");
+    function withBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
+        return _controlFlowBind(source, sourceProps, dest, customConverter, "with");
     }
 
-    function ifBind(source, sourceProps: string[], dest: HTMLElement, convert: Function): ICancelable {
-        return _controlFlowBind(source, sourceProps, dest, convert, "if");
+    function ifBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
+        return _controlFlowBind(source, sourceProps, dest, customConverter, "if");
     }
 
-    function ifNotBind(source, sourceProps: string[], dest: HTMLElement, convert: Function): ICancelable {
-        return _controlFlowBind(source, sourceProps, dest, convert, "ifnot");
+    function ifNotBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
+        return _controlFlowBind(source, sourceProps, dest, customConverter, "ifnot");
     }
 
 
-    function _eventBind(source, sourceProps: string[], dest: HTMLElement, convert : Function, getEvents: Function): ICancelable {
+    function _eventBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter, getEvents: Function): ICancelable {
 
         var data = DataContext.isObservableDataContext(source) ? WinJS.Binding.unwrap(source.$data) : source;
 
@@ -215,7 +223,7 @@ module WinJS.KO {
             }
         }
 
-        return createBinding(source, sourceProps, dest, ["_winjs_ko_eventBind"], convert, function(sourceData) {
+        return createBinding(source, sourceProps, dest, ["_winjs_ko_eventBind"], customConverter, function (sourceData) {
 
             var events = getEvents(sourceData) || {};
 
@@ -229,56 +237,61 @@ module WinJS.KO {
         }, _removeEvents);
     }
 
-    function clickBind(source, sourceProps: string[], dest: HTMLElement, convert: Function): ICancelable {
-        return _eventBind(source, sourceProps, dest, convert, function (event) {
+    function clickBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
+        return _eventBind(source, sourceProps, dest, customConverter, function (event) {
             return { click: event };
         });
     }
 
-    function eventBind(source, sourceProps: string[], dest: HTMLElement, convert : Function): ICancelable {
-        return _eventBind(source, sourceProps, dest, convert, function (events) {
+    function eventBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
+        return _eventBind(source, sourceProps, dest, customConverter, function (events) {
             return events;
         });
     }
 
-    function submitBind(source, sourceProps: string[], dest: HTMLElement, convert: Function): ICancelable {
-        return _eventBind(source, sourceProps, dest, convert, function (event) {
+    function submitBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
+        return _eventBind(source, sourceProps, dest, customConverter, function (event) {
             return { submit: event };
         });
     }
 
-    function enableBind(source, sourceProps: string[], dest: HTMLElement, convert : Function): ICancelable {
-        return createBinding(source, sourceProps, dest, ["disabled"], convert, function (value) {
+    function enableBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
+        return createBinding(source, sourceProps, dest, ["disabled"], customConverter, function (value) {
             return !value;
         });
     }
 
-    function valueBind(source, sourceProps: string[], dest: HTMLInputElement, convert : Function): ICancelable {
+    function _registerBindEvent(eventName: string, source, sourceProps: string[], dest: HTMLElement, customConverter: any, getValue: Function) {
         function updateSource() {
-            _nestedSet(source, sourceProps, dest.value);
+            var convertBack = customConverter instanceof Function ? customConverter : customConverter && customConverter.convertBack;
+            _nestedSet(source, sourceProps, getValue(dest), convertBack);
         }
 
-        dest.addEventListener("input", updateSource);
+        dest.addEventListener(eventName, updateSource);
 
-        return createBinding(source, sourceProps, dest, ["value"], convert, undefined, function(){
-            dest.removeEventListener("input", updateSource);
-        });
+        return function () {
+            return dest.removeEventListener(eventName, updateSource);
+        };
     }
 
-    function hasFocusBind(source, sourceProps: string[], dest: HTMLElement, convert : Function) {
+    function valueBind(source, sourceProps: string[], dest: HTMLInputElement, customConverter: CustomConverter): ICancelable {
+        return createBinding(source, sourceProps, dest, ["value"], customConverter, undefined,
+            _registerBindEvent("input", source, sourceProps, dest, customConverter, function (dest) {
+                return dest.value;
+            }));
+    }
+
+    function hasFocusBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter) {
 
         function elementHasFocus(element: HTMLElement): boolean {
             return element.ownerDocument.activeElement == element;
         }
 
-        function updateSource() {
-            _nestedSet(source, sourceProps, elementHasFocus(dest));
-        }
 
-        dest.addEventListener("focus", updateSource);
-        dest.addEventListener("blur", updateSource);
+        var focusEventDispose = _registerBindEvent("focus", source, sourceProps, dest, customConverter, elementHasFocus);
+        var blurEventDispose = _registerBindEvent("blur", source, sourceProps, dest, customConverter, elementHasFocus);
 
-        return createBinding(source, sourceProps, dest, ["_winjs_ko_hasFocus"], convert, function (hasFocus: boolean) {
+        return createBinding(source, sourceProps, dest, ["_winjs_ko_hasFocus"], customConverter, function (hasFocus: boolean) {
 
             var destHasFocus = elementHasFocus(dest);
 
@@ -288,21 +301,27 @@ module WinJS.KO {
 
             return hasFocus;
         },
-        function () {
-            dest.removeEventListener("focus", updateSource);
-            dest.removeEventListener("blur", updateSource);
-        });
+            function () {
+                focusEventDispose();
+                blurEventDispose();
+            });
     }
 
-    function checkedBind(source, sourceProps: string[], dest: HTMLInputElement, convert: Function): ICancelable {
+    function checkedBind(source, sourceProps: string[], dest: HTMLInputElement, customConverter: CustomConverter): ICancelable {
 
-        function shouldBeChecked(data): boolean {
+        function checkedConvert(data): boolean {
             if (dest.tagName != "INPUT")
                 return false;
 
             if (dest.type == "checkbox") {
                 if (data instanceof Array || data instanceof WinJS.Binding.List) {
-                    return data.indexOf(dest.value) >= 0;
+                    if (isObservableArray(data)) {
+                        //bind to observable array
+                        return data.array.indexOf(dest.value) >= 0;
+                    }
+                    else {
+                        return data.indexOf(dest.value) >= 0;
+                    }
                 }
                 else {
                     return data;
@@ -316,65 +335,47 @@ module WinJS.KO {
             }
         }
 
-        function updateSource() {
-            _nestedSet(source, sourceProps, dest.checked, function (checked: boolean, oldValue): any {
-                if (dest.type == "checkbox" && (oldValue instanceof Array || oldValue instanceof WinJS.Binding.List)) {
-                    var index = oldValue.indexOf(dest.value);
-                    if (checked && index < 0) {
-                        oldValue.push(dest.value);
-                    }
-                    else if (!checked && index >= 0) {
-                        oldValue.splice(index, 1);
-                    }
-                    return oldValue;
+        var checkedConvertBack = function (checked: boolean, oldValue): any {
+            if (dest.type == "checkbox" && (oldValue instanceof Array || oldValue instanceof WinJS.Binding.List)) {
+                var index = oldValue.indexOf(dest.value);
+                if (checked && index < 0) {
+                    oldValue.push(dest.value);
                 }
-                else if (dest.type == "radio") {
-                    if (checked) {
-                        return dest.value;
-                    }
-                    else if (oldValue == dest.value) {
-                        return undefined;
-                    }
-                    else {
-                        return oldValue;
-                    }
+                else if (!checked && index >= 0) {
+                    oldValue.splice(index, 1);
+                }
+                return oldValue;
+            }
+            else if (dest.type == "radio") {
+                if (checked) {
+                    return dest.value;
+                }
+                else if (oldValue == dest.value) {
+                    return undefined;
                 }
                 else {
-                    return checked;
+                    return oldValue;
                 }
-            });
+            }
+            else {
+                return checked;
+            }
+        };
+
+        if (!(customConverter instanceof CustomConverter)) {
+            customConverter = new CustomConverter(checkedConvert, checkedConvertBack, true);
         }
 
-        dest.addEventListener("change", updateSource);
-
-
-        var checkedUpdater;
-
-        return createBinding(source, sourceProps, dest, ["checked"], convert, function (data) {
-            if (checkedUpdater) {
-                data.unbind("_array", checkedUpdater);
-                checkedUpdater = undefined;
-            }
-
-            if (WinJS.KO.isObservableArray(data)) {
-                checkedUpdater = function () {
-                    dest.checked = shouldBeChecked(data);
-                }
-                data.bind("_array", checkedUpdater);
-            }
-
-            return shouldBeChecked(data);
-        },
-        function () {
-            dest.removeEventListener("change", updateSource);
-        });
+        return createBinding(source, sourceProps, dest, ["checked"], customConverter, undefined, _registerBindEvent("change", source, sourceProps, dest, customConverter, function (dest) {
+            return dest.checked;
+        }));
     }
 
-    function optionsBind(source, sourceProps: string[], dest: HTMLSelectElement, convert : Function): ICancelable {
+    function optionsBind(source, sourceProps: string[], dest: HTMLSelectElement, customConverter: CustomConverter): ICancelable {
         var div = document.createElement("div");
         div.innerHTML = "<option data-win-bind=\"$option : $data\"/>";
         var template = new WinJS.Binding.Template(div);
-        template.bindingInitializer = WinJS.KO.converter(convert);
+        template.bindingInitializer = _converter(customConverter);
 
         var flowControl = new WinJS.KO.FlowControl(dest, {
             template: template
@@ -386,7 +387,7 @@ module WinJS.KO {
         });
     }
 
-    function optionBind(source, sourceProps: string[], dest: HTMLOptionElement, convert: any): ICancelable {
+    function optionBind(source, sourceProps: string[], dest: HTMLOptionElement, customConverter: CustomConverter): ICancelable {
         function updateOption(data) {
             if (data) {
                 dest.value = data.value || data.text;
@@ -394,41 +395,28 @@ module WinJS.KO {
             }
         }
 
-        if (!convert) {
-            convert = function (data) {
-                if (typeof data == "string") {
-                    return {
-                        value: data,
-                        text: data
-                    }
-                }
-                else (typeof data == "object")
-                {
-                    return {
-                        value: data.value,
-                        text: data.text
-                    }
+        var convert = (customConverter && customConverter.convert) || function (data) {
+            if (typeof data == "object") {
+                return {
+                    value: data.value,
+                    text: data.text
                 }
             }
-        }
+            return {
+                text: data
+            }
+        };
 
-        var _computedConverter;
-        if (convert instanceof Function) {
-            _computedConverter = new ComputedConverter(convert, updateOption);
-        }
-        else if (convert instanceof ComputedConverter) {
-            _computedConverter = new ComputedConverter(convert.converter, function (value) {
-                if (convert.updater) {
-                    convert.updater(value);
-                }
-                updateOption(value);
-            });
-        }
+        var converter = new CustomConverter(function (data) {
+            var optionData = convert(data);
+            updateOption(optionData);
+            return optionData;
+        }, undefined, true);
 
-        return createBinding(source, sourceProps, dest, ["_winjs_ko_option"], _computedConverter);
+        return createBinding(source, sourceProps, dest, ["_winjs_ko_option"], converter);
     }
 
-    function selectedOptionsBind(source, sourceProps: string[], dest: HTMLSelectElement): ICancelable {
+    function selectedOptionsBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
         function updateSelectedOptions(selectedOptions) {
             var child = dest.firstElementChild;
             while (child) {
@@ -440,16 +428,18 @@ module WinJS.KO {
             }
         }
 
-        var convert = WinJS.Binding.converter(function (selectedOptions) {
-            if (isObservableArray(selectedOptions)) {
-                selectedOptions.bind("_array", updateSelectedOptions);
-            }
-            else {
-                updateSelectedOptions(selectedOptions);
-            }
-        });
+        var computedConverter = new CustomConverter(function (data) {
+            var convert = (customConverter && customConverter.convert) || defaultConvert;
+            var convertedData = convert(data);
 
-        function updateSource() {
+            if (isObservableArray(convertedData)) {
+                //bind to the observable array
+                convertedData = data.array;
+            }
+            return convertedData;   
+        }, undefined, true);
+
+        function getSelectedOptions(dest : HTMLElement) : string[] {
             var selected = [];
             var child = dest.firstElementChild;
             while (child) {
@@ -461,21 +451,22 @@ module WinJS.KO {
                 }
                 child = child.nextElementSibling;
             }
-            _nestedSet(source, sourceProps, selected, function (newValue, oldValue) {
-                if (oldValue instanceof Array || oldValue instanceof WinJS.Binding.List) {
-                    oldValue.splice(0, oldValue.length);
-                    oldValue.push.apply(oldValue, newValue);
-                }
-                return oldValue;
-            });
+            return selected;
         };
 
-        dest.addEventListener("change", updateSource);
+        function convertBack(value, oldValue) {
+            var convertBack = (customConverter && customConverter.convertBack) || defaultConvert;
+            var newValue = convertBack(value);
+            if (oldValue instanceof Array || oldValue instanceof WinJS.Binding.List) {
+                oldValue.splice(0, oldValue.length);
+                oldValue.push.apply(oldValue, newValue);
+                return oldValue;
+            }
+            return newValue;
+        };
 
-        var convertCancelable = convert(source, sourceProps, dest, "_winjs_ko_selectedOptions");
-        return new Cancelable(convertCancelable, function () {
-            dest.removeEventListener("change", updateSource);
-        });
+        return createBinding(source, sourceProps, dest, ["_winjs_ko_selectedOptions"], computedConverter, updateSelectedOptions,
+            _registerBindEvent("change", source, sourceProps, dest, convertBack, getSelectedOptions));
     }
 
     export class FlowControl {
@@ -541,7 +532,7 @@ module WinJS.KO {
                     }
                     div["_winjs_ko_dataContext"] = context;
                 }
-                
+
                 this._template.render(data, div);
 
                 var element;
@@ -679,7 +670,7 @@ module WinJS.KO {
             while (this.element.childElementCount > 0) {
                 var child = this.element.lastElementChild;
                 var disposeChild = child["_winjs_ko_dispose"];
-                if (typeof  disposeChild == "function") {
+                if (typeof disposeChild == "function") {
                     disposeChild();
                 }
 

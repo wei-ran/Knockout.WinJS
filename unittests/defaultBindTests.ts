@@ -560,6 +560,57 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
+    function selectedOptionsBindWithConverter(complete) {
+        var viewModel = WinJS.KO.observable({
+            options: ["v1", "v2", "v3"],
+            selected: WinJS.KO.observableArray(["v2"]),
+        });
+
+        function convert(source) {
+            var converted = [];
+            viewModel.options.forEach(function (value) {
+                if (wko.isObservableArray(source)) {
+                    source = source.array;
+                }
+
+                if (source.indexOf(value) < 0) {
+                    converted.push(value);
+                }
+            });
+            return converted;
+        }
+
+        myConverter = WinJS.KO.converter(convert, convert);
+
+        var select = document.createElement("select");
+        document.body.appendChild(select);
+        select.setAttribute(WinJSBindingAttribute, "$options : options WinJS.KO.defaultBind; $selectedOptions : selected WinJS.Knockout.UnitTests.myConverter");
+        select.setAttribute("multiple", "true");
+        wb.processAll(select, viewModel).then(() => {
+            assert.ok(select.children[0]["selected"]);
+            assert.ok(!select.children[1]["selected"]);
+            assert.ok(select.children[2]["selected"]);
+
+            viewModel.selected.splice(0, 1);
+            viewModel.selected.push("v3");
+
+            _scheduleNTimes(0, 100).then(() => {
+                assert.ok(select.children[0]["selected"]);
+                assert.ok(select.children[1]["selected"]);
+                assert.ok(!select.children[2]["selected"]);
+                select.children[0]["selected"] = false;
+                select.children[2]["selected"] = true;
+                _dispatchEvent("change", select);
+                _scheduleNTimes(0, 100).then(() => {
+                    assert.equal(viewModel.selected.getAt(0), "v1");
+                    assert.equal(viewModel.selected.length, 1);
+                    document.body.removeChild(select);
+                    complete();
+                });
+            });
+        });
+    }
+
     function _post(v): WinJS.Promise<any> {
         return WinJS.Utilities.Scheduler.schedulePromiseNormal().then(function () { return v; });
     }
@@ -603,7 +654,8 @@ module WinJS.Knockout.UnitTests {
         "Visible Bind": visibleBind,
         "Visible Bind with Negative Converter": visibleBindWithNegConverter,
         "Options Bind": optionsBind,
-        "Options Bind with converter": optionsBindWithConverter
+        "Options Bind with converter": optionsBindWithConverter,
+        "Selected Options with converter": selectedOptionsBindWithConverter,
     };
 
     export var myConverter;
