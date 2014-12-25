@@ -28,7 +28,7 @@ module WinJS.KO {
     }
 
     export var defaultBind = WinJS.Binding.initializer(function (
-        source, sourceProps: string[], dest: HTMLElement, destProps: string[], converter?: Function): ICancelable {
+        source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConverter?: CustomConverter): ICancelable {
 
         var data = source;
         if (destProps.length > 0 && _dataContextMemebrs[sourceProps[0]]) {
@@ -41,11 +41,11 @@ module WinJS.KO {
             var destProp = destProps[0];
 
             if (_koBindings[destProp]) {
-                return _koBindings[destProp](data, sourceProps, dest, converter);
+                return _koBindings[destProp](data, sourceProps, dest, customConverter);
             }
         }
 
-        return WinJS.Binding.defaultBind(data, sourceProps, dest, destProps)
+        return _createBinding(data, sourceProps, dest, destProps, customConverter);
     });
 
     interface ICancelable {
@@ -73,7 +73,7 @@ module WinJS.KO {
         }
     }
 
-    class CustomConverter {
+    class CustomConverter implements IConvert {
         constructor(convert: Function, convertBack?: Function, isComputed?: boolean) {
             this.convert = convert;
             this.convertBack = convertBack;
@@ -85,19 +85,48 @@ module WinJS.KO {
         isComputed: boolean;
     }
 
-    function _converter(customConverter: CustomConverter) {
-        return WinJS.Utilities.markSupportedForProcessing(
+    export interface IConvert {
+        convert: Function;
+        convertBack?: Function;
+    }
+
+    export interface IConverter {
+        fn: Function;
+        <T>(convert: Function, initializer?: Function);
+        <T>(convert: IConvert, initializer?: Function);
+    }
+
+    function _converterImpl(customConverter : CustomConverter, initializer? : Function){
+        initializer = initializer || defaultBind;
+        return WinJS.Binding.initializer(
             function (source, sourceProps: string[], dest: HTMLElement, destProps: string[]) {
-                return defaultBind(source, sourceProps, dest, destProps, customConverter);
+                return initializer(source, sourceProps, dest, destProps, customConverter);
             });
     }
 
-    export function converter(convert: Function, convertBack?: Function) {
-        return _converter(new CustomConverter(convert, convertBack));
+    function _converter(convert, isComputed: boolean, initializer? : Function) {
+        var customConverter = typeof convert == "object" ?
+            new CustomConverter(convert.convert, convert.convertBack, isComputed) :
+            new CustomConverter(convert, undefined, isComputed);
+
+        return _converterImpl(customConverter, initializer);
     }
 
-    export function computedConverter(convert: Function, convertBack?: Function) {
-        return _converter(new CustomConverter(convert, convertBack, true));
+    export var converter = <IConverter>function (convert, initializer? : Function) {
+        return _converter(convert, false, initializer);
+    };
+
+    export var computedConverter = <IConverter>function (convert, initializer?: Function) {
+        return _converter(convert, true, initializer);
+    }
+
+    export function twoWaysBind(eventNames: string[], getValue?: Function) {
+        return WinJS.Binding.initializer(function (source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConverter : CustomConverter) {
+            getValue = getValue || WinJS.Binding["getValue"];
+            return new Cancelable(
+                defaultBind(source, sourceProps, dest, destProps, customConverter),
+                _registerBindEvent(eventNames, source, sourceProps, dest, customConverter, getValue));
+        });
     }
 
     export var negConverter = converter(function (value) {
@@ -108,8 +137,7 @@ module WinJS.KO {
         return data;
     }
 
-    function createBinding(source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConverter?: CustomConverter, convert?: Function, dispose?: Function): ICancelable {
-        //customConverter = customConverter || defaultConvert;
+    function _createBinding(source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConverter?: CustomConverter, convert?: Function, dispose?: Function): ICancelable {
         convert = convert || defaultConvert;
         var disposeComputed;
 
@@ -119,7 +147,7 @@ module WinJS.KO {
             if (customConverter instanceof CustomConverter && customConverter.convert instanceof Function) {
                 if (customConverter.isComputed) {
                     var computedObj = computed(function () {
-                        return customConverter.convert(WinJS.Binding.as(data));
+                        return customConverter.convert(WinJS.Binding.as(data), source, sourceProps, dest, destProps);
                     });
                     convertedData = computedObj.value;
                     var updater = function (value) {
@@ -129,10 +157,11 @@ module WinJS.KO {
 
                     disposeComputed = function () {
                         computedObj.unbind("value", updater);
+                        computedObj.dispose();
                     }
                 }
                 else {
-                    convertedData = customConverter.convert(data);
+                    convertedData = customConverter.convert(data, source, sourceProps, dest, destProps);
                 }
             }
             return convert(convertedData);
@@ -148,7 +177,7 @@ module WinJS.KO {
     }
 
     function visibleBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
-        return createBinding(source, sourceProps, dest, ["style", "display"], customConverter, function (visible: boolean) {
+        return _createBinding(source, sourceProps, dest, ["style", "display"], customConverter, function (visible: boolean) {
             return visible ? "" : "none";
         });
     }
@@ -171,7 +200,7 @@ module WinJS.KO {
         flowControl.type = type;
         flowControl.source = source;
 
-        return createBinding(source, sourceProps, dest, ["winControl", "data"], customConverter, undefined, function () {
+        return _createBinding(source, sourceProps, dest, ["winControl", "data"], customConverter, undefined, function () {
             if (newFlowControl) {
                 newFlowControl.dispose();
             }
@@ -223,7 +252,7 @@ module WinJS.KO {
             }
         }
 
-        return createBinding(source, sourceProps, dest, ["_winjs_ko_eventBind"], customConverter, function (sourceData) {
+        return _createBinding(source, sourceProps, dest, ["_winjs_ko_eventBind"], customConverter, function (sourceData) {
 
             var events = getEvents(sourceData) || {};
 
@@ -256,27 +285,31 @@ module WinJS.KO {
     }
 
     function enableBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
-        return createBinding(source, sourceProps, dest, ["disabled"], customConverter, function (value) {
+        return _createBinding(source, sourceProps, dest, ["disabled"], customConverter, function (value) {
             return !value;
         });
     }
 
-    function _registerBindEvent(eventName: string, source, sourceProps: string[], dest: HTMLElement, customConverter: any, getValue: Function) {
+    function _registerBindEvent(eventNames: string[], source, sourceProps: string[], dest: HTMLElement, customConverter: any, getValue: Function) {
         function updateSource() {
             var convertBack = customConverter instanceof Function ? customConverter : customConverter && customConverter.convertBack;
             _nestedSet(source, sourceProps, getValue(dest), convertBack);
         }
 
-        dest.addEventListener(eventName, updateSource);
+        eventNames.forEach(function (eventName) {
+            dest.addEventListener(eventName, updateSource);
+        });
 
         return function () {
-            return dest.removeEventListener(eventName, updateSource);
+            eventNames.forEach(function (eventName) {
+                return dest.removeEventListener(eventName, updateSource);
+            });
         };
     }
 
     function valueBind(source, sourceProps: string[], dest: HTMLInputElement, customConverter: CustomConverter): ICancelable {
-        return createBinding(source, sourceProps, dest, ["value"], customConverter, undefined,
-            _registerBindEvent("input", source, sourceProps, dest, customConverter, function (dest) {
+        return _createBinding(source, sourceProps, dest, ["value"], customConverter, undefined,
+            _registerBindEvent(["input"], source, sourceProps, dest, customConverter, function (dest) {
                 return dest.value;
             }));
     }
@@ -287,11 +320,7 @@ module WinJS.KO {
             return element.ownerDocument.activeElement == element;
         }
 
-
-        var focusEventDispose = _registerBindEvent("focus", source, sourceProps, dest, customConverter, elementHasFocus);
-        var blurEventDispose = _registerBindEvent("blur", source, sourceProps, dest, customConverter, elementHasFocus);
-
-        return createBinding(source, sourceProps, dest, ["_winjs_ko_hasFocus"], customConverter, function (hasFocus: boolean) {
+        return _createBinding(source, sourceProps, dest, ["_winjs_ko_hasFocus"], customConverter, function (hasFocus: boolean) {
 
             var destHasFocus = elementHasFocus(dest);
 
@@ -300,11 +329,7 @@ module WinJS.KO {
             }
 
             return hasFocus;
-        },
-            function () {
-                focusEventDispose();
-                blurEventDispose();
-            });
+        }, _registerBindEvent(["focus", "blur"], source, sourceProps, dest, customConverter, elementHasFocus));
     }
 
     function checkedBind(source, sourceProps: string[], dest: HTMLInputElement, customConverter: CustomConverter): ICancelable {
@@ -366,7 +391,7 @@ module WinJS.KO {
             customConverter = new CustomConverter(checkedConvert, checkedConvertBack, true);
         }
 
-        return createBinding(source, sourceProps, dest, ["checked"], customConverter, undefined, _registerBindEvent("change", source, sourceProps, dest, customConverter, function (dest) {
+        return _createBinding(source, sourceProps, dest, ["checked"], customConverter, undefined, _registerBindEvent(["change"], source, sourceProps, dest, customConverter, function (dest) {
             return dest.checked;
         }));
     }
@@ -375,7 +400,7 @@ module WinJS.KO {
         var div = document.createElement("div");
         div.innerHTML = "<option data-win-bind=\"$option : $data\"/>";
         var template = new WinJS.Binding.Template(div);
-        template.bindingInitializer = _converter(customConverter);
+        template.bindingInitializer = _converterImpl(customConverter);
 
         var flowControl = new WinJS.KO.FlowControl(dest, {
             template: template
@@ -413,7 +438,7 @@ module WinJS.KO {
             return optionData;
         }, undefined, true);
 
-        return createBinding(source, sourceProps, dest, ["_winjs_ko_option"], converter);
+        return _createBinding(source, sourceProps, dest, ["_winjs_ko_option"], converter);
     }
 
     function selectedOptionsBind(source, sourceProps: string[], dest: HTMLElement, customConverter: CustomConverter): ICancelable {
@@ -465,8 +490,8 @@ module WinJS.KO {
             return newValue;
         };
 
-        return createBinding(source, sourceProps, dest, ["_winjs_ko_selectedOptions"], computedConverter, updateSelectedOptions,
-            _registerBindEvent("change", source, sourceProps, dest, convertBack, getSelectedOptions));
+        return _createBinding(source, sourceProps, dest, ["_winjs_ko_selectedOptions"], computedConverter, updateSelectedOptions,
+            _registerBindEvent(["change"], source, sourceProps, dest, convertBack, getSelectedOptions));
     }
 
     export class FlowControl {
