@@ -69,34 +69,19 @@
             return CustomConverter;
         })();
 
-        function _converterImpl(customConverter, initializer) {
-            initializer = initializer || KO.defaultBind;
+        function _converterImpl(customConverter) {
             return WinJS.Binding.initializer(function (source, sourceProps, dest, destProps) {
-                return initializer(source, sourceProps, dest, destProps, customConverter);
+                return KO.defaultBind(source, sourceProps, dest, destProps, customConverter);
             });
         }
 
-        function _converter(convert, isComputed, initializer) {
-            var customConverter = typeof convert == "object" ? new CustomConverter(convert.convert, convert.convertBack, isComputed) : new CustomConverter(convert, undefined, isComputed);
-
-            return _converterImpl(customConverter, initializer);
-        }
-
-        KO.converter = function (convert, initializer) {
-            return _converter(convert, false, initializer);
+        KO.converter = function (convert, convertBack) {
+            return _converterImpl(new CustomConverter(convert, convertBack, false));
         };
 
-        KO.computedConverter = function (convert, initializer) {
-            return _converter(convert, true, initializer);
+        KO.computedConverter = function (convert, convertBack) {
+            return _converterImpl(new CustomConverter(convert, convertBack, true));
         };
-
-        function twoWaysBind(eventNames, getValue) {
-            return WinJS.Binding.initializer(function (source, sourceProps, dest, destProps, customConverter) {
-                getValue = getValue || WinJS.Binding["getValue"];
-                return new Cancelable(KO.defaultBind(source, sourceProps, dest, destProps, customConverter), _registerBindEvent(eventNames, source, sourceProps, dest, customConverter, getValue));
-            });
-        }
-        KO.twoWaysBind = twoWaysBind;
 
         KO.negConverter = KO.converter(function (value) {
             return !value;
@@ -746,11 +731,16 @@
                     return;
                 }
             }
-            var prop = destProperties[destProperties.length - 1];
-            if (converter) {
-                value = converter(value, dest[prop]);
+
+            if (destProperties.length > 0) {
+                var prop = destProperties[destProperties.length - 1];
+                if (converter) {
+                    value = converter(value, dest[prop], dest, destProperties);
+                }
+                dest[prop] = value;
+            } else {
+                converter(value, dest, dest, destProperties);
             }
-            dest[prop] = value;
         }
 
         (function cctor() {
