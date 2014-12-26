@@ -26,11 +26,11 @@ HTML:
 		<body>
 			<p>
 				First name: 
-				<input data-win-bind="value: firstName WinJS.KO.defaultBind" />
+				<input data-win-bind="$value: firstName WinJS.KO.defaultBind" />
 			</p>
 			<p>
 				Last name: 
-				<input data-win-bind="value: lastName  WinJS.KO.defaultBind" />
+				<input data-win-bind="$value: lastName  WinJS.KO.defaultBind" />
 			</p>
 			<p>
 				<span data-win-bind="textContent: fullName WinJS.KO.defaultBind"/>
