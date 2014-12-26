@@ -580,7 +580,7 @@ module WinJS.Knockout.UnitTests {
             return converted;
         }
 
-        testInitializer = WinJS.KO.converter({ convert: convert, convertBack: convert });
+        testInitializer = WinJS.KO.converter(convert, convert);
 
         var select = document.createElement("select");
         document.body.appendChild(select);
@@ -639,75 +639,6 @@ module WinJS.Knockout.UnitTests {
         });
     }
 
-    function twoWaysBind(complete) {
-
-        testInitializer = wko.twoWaysBind(["change"]);
-
-        var viewModel = wko.observable({
-            checked: true
-        });
-
-        var input = document.createElement("input");
-        input.type = "checkbox";
-        document.body.appendChild(input);
-        input.setAttribute(WinJSBindingAttribute, "checked : checked WinJS.Knockout.UnitTests.testInitializer");
-        wb.processAll(input, viewModel).then(function () {
-            assert.ok(input.checked);
-            viewModel.checked = false;
-            _scheduleNTimes(0, 10).then(function () {
-                assert.ok(!input.checked);
-                input.checked = true;
-                _dispatchEvent("change", input);
-                _scheduleNTimes(0, 50).then(function () {
-                    assert.ok(viewModel.checked);
-                    complete();
-                });
-            });
-        });
-    }
-
-    function twoWaysBindWithConverter(complete) {
-
-        function hasFocus(element: HTMLElement) {
-            return element.ownerDocument.activeElement == element;
-        }
-
-        testInitializer = wko.converter({
-            convert: function (value, source, sourceProps, dest: HTMLElement) {
-                if (value === "true") {
-                    dest.focus();
-                }
-                else {
-                    dest.blur();
-                }
-            },
-            convertBack: function (value) {
-                return value.toString();
-            }
-        }, wko.twoWaysBind(["blur", "focus"], hasFocus));
-
-        var viewModel = wko.observable({
-            hasFocus: "true"
-        });
-
-        var input = document.createElement("input");
-        document.body.appendChild(input);
-        input.setAttribute(WinJSBindingAttribute, "testHasFocus : hasFocus WinJS.Knockout.UnitTests.testInitializer");
-        wb.processAll(input, viewModel).then(function () {
-            assert.ok(hasFocus(input));
-            viewModel.hasFocus = "false";
-            _scheduleNTimes(0, 10).then(function () {
-                assert.ok(!hasFocus(input));
-                input.focus();
-                _dispatchEvent("focus", input);
-                _scheduleNTimes(0, 50).then(function () {
-                    assert.equal(viewModel.hasFocus, "true");
-                    complete();
-                });
-            });
-        });
-    }
-
     function _post(v): WinJS.Promise<any> {
         return WinJS.Utilities.Scheduler.schedulePromiseNormal().then(function () { return v; });
     }
@@ -754,8 +685,6 @@ module WinJS.Knockout.UnitTests {
         "Options Bind with converter": optionsBindWithConverter,
         "Selected Options with converter": selectedOptionsBindWithConverter,
         "Computed Converter": computedConverter,
-        "Two-ways Bind": twoWaysBind,
-        "Two-ways Bind with Converter": twoWaysBindWithConverter,
     };
 
     export var testInitializer;

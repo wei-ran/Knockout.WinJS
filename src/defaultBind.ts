@@ -29,7 +29,6 @@ module WinJS.KO {
 
     export var defaultBind = WinJS.Binding.initializer(function (
         source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConverter?: CustomConverter): ICancelable {
-
         var data = source;
         if (destProps.length > 0 && _dataContextMemebrs[sourceProps[0]]) {
             var dataContext = DataContext.getDataContextFromElement(dest);
@@ -96,37 +95,19 @@ module WinJS.KO {
         <T>(convert: IConvert, initializer?: Function);
     }
 
-    function _converterImpl(customConverter : CustomConverter, initializer? : Function){
-        initializer = initializer || defaultBind;
+    function _converterImpl(customConverter: CustomConverter) {
         return WinJS.Binding.initializer(
             function (source, sourceProps: string[], dest: HTMLElement, destProps: string[]) {
-                return initializer(source, sourceProps, dest, destProps, customConverter);
+                return defaultBind(source, sourceProps, dest, destProps, customConverter);
             });
     }
 
-    function _converter(convert, isComputed: boolean, initializer? : Function) {
-        var customConverter = typeof convert == "object" ?
-            new CustomConverter(convert.convert, convert.convertBack, isComputed) :
-            new CustomConverter(convert, undefined, isComputed);
-
-        return _converterImpl(customConverter, initializer);
+    export var converter = function (convert: Function, convertBack?: Function) {
+        return _converterImpl(new CustomConverter(convert, convertBack, false));
     }
 
-    export var converter = <IConverter>function (convert, initializer? : Function) {
-        return _converter(convert, false, initializer);
-    };
-
-    export var computedConverter = <IConverter>function (convert, initializer?: Function) {
-        return _converter(convert, true, initializer);
-    }
-
-    export function twoWaysBind(eventNames: string[], getValue?: Function) {
-        return WinJS.Binding.initializer(function (source, sourceProps: string[], dest: HTMLElement, destProps: string[], customConverter : CustomConverter) {
-            getValue = getValue || WinJS.Binding["getValue"];
-            return new Cancelable(
-                defaultBind(source, sourceProps, dest, destProps, customConverter),
-                _registerBindEvent(eventNames, source, sourceProps, dest, customConverter, getValue));
-        });
+    export var computedConverter = function (convert: Function, convertBack?: Function) {
+        return _converterImpl(new CustomConverter(convert, convertBack, true));
     }
 
     export var negConverter = converter(function (value) {
@@ -461,10 +442,10 @@ module WinJS.KO {
                 //bind to the observable array
                 convertedData = data.array;
             }
-            return convertedData;   
+            return convertedData;
         }, undefined, true);
 
-        function getSelectedOptions(dest : HTMLElement) : string[] {
+        function getSelectedOptions(dest: HTMLElement): string[] {
             var selected = [];
             var child = dest.firstElementChild;
             while (child) {
@@ -808,11 +789,18 @@ module WinJS.KO {
                 return;
             }
         }
-        var prop = destProperties[destProperties.length - 1];
-        if (converter) {
-            value = converter(value, dest[prop]);
+
+        if (destProperties.length > 0) {
+            var prop = destProperties[destProperties.length - 1];
+            if (converter) {
+                value = converter(value, dest[prop], dest, destProperties);
+            }
+            dest[prop] = value;
         }
-        dest[prop] = value;
+        else {
+            //still invoke the converter
+            converter(value, dest, dest, destProperties);
+        }
     }
 
     (function cctor() {
